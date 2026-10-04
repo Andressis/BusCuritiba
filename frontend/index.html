@@ -1,0 +1,199 @@
+<!-- Version = v1.0.0 -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Bus Cwb - Transporte Coletivo de Curitiba</title>
+
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#12372A" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Bus Cwb" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+  <link rel="stylesheet" href="style.css?v=1.0.0" />
+</head>
+
+<body>
+
+  <header class="app-header">
+    <div class="header-content">
+      <div class="logo-area">
+        <span class="logo-mark">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="4" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.6" />
+            <line x1="4" y1="10.5" x2="20" y2="10.5" stroke="currentColor" stroke-width="1.6" />
+            <line x1="8" y1="4" x2="8" y2="10.5" stroke="currentColor" stroke-width="1.6" />
+            <line x1="16" y1="4" x2="16" y2="10.5" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="8" cy="18" r="1.6" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="16" cy="18" r="1.6" stroke="currentColor" stroke-width="1.6" />
+          </svg>
+        </span>
+        <div class="titles">
+          <h1>Bus Cwb</h1>
+          <p>Transporte coletivo de Curitiba</p>
+        </div>
+      </div>
+      <button id="btn-instalar-app" class="btn-instalar-app oculto" type="button" aria-label="Instalar Bus Cwb">
+        Instalar
+      </button>
+    </div>
+  </header>
+
+  <main class="app-main">
+
+    <section id="tela-inicio" class="tela ativa">
+
+      <div class="busca-container">
+        <input type="text" id="input-busca" placeholder="Digite o número ou nome da linha" autocomplete="off" />
+        <button id="btn-buscar" aria-label="Pesquisar linha">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8" />
+            <line x1="20" y1="20" x2="15.5" y2="15.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+
+      <section class="secao">
+        <div class="secao-titulo">
+          <h2>Linhas favoritas</h2>
+        </div>
+        <div id="lista-favoritas" class="lista-linhas-container lista-favoritas">
+          <p class="mensagem-vazia" id="msg-sem-favoritas">
+            Você ainda não tem linhas favoritas. Toque na estrela de uma linha para adicionar.
+          </p>
+        </div>
+      </section>
+
+      <section class="secao">
+        <div class="secao-titulo">
+          <h2>Linhas e próximos horários</h2>
+        </div>
+        <div id="lista-linhas" class="lista-linhas-container">
+        </div>
+        <p class="mensagem-vazia oculto" id="msg-sem-resultado">
+          Nenhuma linha encontrada para essa busca.
+        </p>
+      </section>
+
+    </section>
+
+    <section id="tela-mapa" class="tela">
+      <div class="mapa-busca">
+        <input id="mapa-busca" class="select-ponto" type="text"
+          placeholder="Digite o número ou nome da linha" autocomplete="off" />
+        <div id="mapa-sugestoes" class="sugestoes oculto"></div>
+      </div>
+      <div id="mapa" class="mapa"></div>
+      <div id="mapa-legenda" class="mapa-legenda oculto">
+        <div><span class="leg-cor" style="background-color: #1B8A3C"></span> Ida <small id="leg-ida"></small></div>
+        <div><span class="leg-cor" style="background-color: #D32F2F"></span> Volta <small id="leg-volta"></small></div>
+      </div>
+      <p class="mensagem-vazia" id="mapa-status" role="status" aria-live="polite">
+        Digite o número ou o nome de uma linha para ver o trajeto.
+      </p>
+    </section>
+
+    <section id="tela-favoritos" class="tela">
+      <div class="secao-titulo">
+        <h2>Minhas linhas favoritas</h2>
+      </div>
+      <div id="lista-favoritos-tela" class="lista-linhas-container">
+      </div>
+      <p class="mensagem-vazia" id="msg-favoritos-vazio">
+        Você ainda não favoritou nenhuma linha. Vá até "Início" e toque
+        na estrela de uma linha para adicioná-la aqui.
+      </p>
+    </section>
+
+  </main>
+
+  <div id="modal-overlay" class="modal-overlay oculto">
+    <div class="modal-linha">
+      <button id="btn-fechar-modal" class="btn-fechar" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg>
+      </button>
+
+      <div class="modal-header">
+        <div class="modal-header-numero" id="modal-numero-linha">250</div>
+        <div class="modal-header-texto">
+          <h2 id="modal-titulo-linha">Ligeirão Norte/Sul</h2>
+          <p id="modal-sentido-texto">Terminal Santa Cândida → Pinheirinho</p>
+        </div>
+      </div>
+
+      <button id="btn-favoritar-modal" class="btn-favoritar">
+        <svg id="icone-favorito-modal" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="12,3 14.9,9.3 21.8,10 16.7,14.6 18.2,21.5 12,17.9 5.8,21.5 7.3,14.6 2.2,10 9.1,9.3"
+            stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+        </svg>
+        <span id="texto-favoritar-modal">Favoritar linha</span>
+      </button>
+
+      <div class="modal-tipo-dia">
+        <span class="rotulo">Tipo de dia</span>
+        <div class="tipo-dia-botoes">
+          <button class="tipo-dia-btn ativo" data-tipo="util">Dia útil</button>
+          <button class="tipo-dia-btn" data-tipo="sabado">Sábado</button>
+          <button class="tipo-dia-btn" data-tipo="domingo">Domingo</button>
+        </div>
+      </div>
+
+      <div class="modal-ponto" id="seletor-ponto-wrapper">
+        <span class="rotulo">Ponto / Terminal</span>
+        <select id="seletor-ponto" class="select-ponto"></select>
+      </div>
+
+      <div class="modal-horarios">
+        <span class="rotulo">Próximos horários</span>
+        <div id="lista-horarios-modal" class="horarios-lista">
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <button class="nav-item ativo" data-tela="tela-inicio">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 11.5L12 4l8 7.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+          stroke-linejoin="round" />
+        <path d="M6 10v9h12v-9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+          stroke-linejoin="round" />
+      </svg>
+      <span class="nav-label">Início</span>
+    </button>
+    <button class="nav-item" data-tela="tela-mapa">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9 4L4 6v14l5-2 6 2 5-2V4l-5 2-6-2z" stroke="currentColor" stroke-width="1.5"
+          stroke-linejoin="round" />
+        <line x1="9" y1="4" x2="9" y2="18" stroke="currentColor" stroke-width="1.5" />
+        <line x1="15" y1="6" x2="15" y2="20" stroke="currentColor" stroke-width="1.5" />
+      </svg>
+      <span class="nav-label">Mapa</span>
+    </button>
+    <button class="nav-item" data-tela="tela-favoritos">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="12,3 14.9,9.3 21.8,10 16.7,14.6 18.2,21.5 12,17.9 5.8,21.5 7.3,14.6 2.2,10 9.1,9.3"
+          stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+      </svg>
+      <span class="nav-label">Favoritos</span>
+    </button>
+  </nav>
+
+  <script src="app.js?v=1.0.0"></script>
+</body>
+
+</html>

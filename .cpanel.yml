@@ -1,0 +1,10 @@
+---
+deployment:
+  tasks:
+    # 1. Copia todos os arquivos da pasta frontend para a public_html
+    - export DEPLOYPATH=/home/httpsbuscwbcom/public_html
+    - /bin/cp -R frontend/. $DEPLOYPATH
+
+    # 2. Copia todos os arquivos da pasta backend para a buscwb-backend
+    - export BACKENDPATH=/home/httpsbuscwbcom/buscwb-backend
+    - /bin/cp -R backend/. $BACKENDPATH
