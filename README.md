@@ -1,5 +1,7 @@
 # Bus Cwb
 
+Link em produção: https://buscwb.com.br
+
 Aplicação de consulta de linhas e horários de ônibus de Curitiba. O
 projeto está separado em `frontend/` (aplicação web estática) e
 `backend/` (API Node.js + MySQL).
