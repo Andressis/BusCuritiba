@@ -1,15 +1,16 @@
 ---
-
 deployment:
-tasks:
-# Frontend: publica os arquivos do site
-- export DEPLOYPATH=/home/httpsbuscwbcom/public_html
-- /bin/mkdir -p "$DEPLOYPATH"
-- /bin/cp -R frontend/. "$DEPLOYPATH"/
+  tasks:
+    # Frontend: publica os arquivos do site
+    - export DEPLOYPATH=/home/httpsbuscwbcom/public_html
+    - /bin/mkdir -p "$DEPLOYPATH"
+    - /bin/cp -R frontend/. "$DEPLOYPATH"/
 
-```
-# Backend: copia os arquivos da aplicação
-- export BACKENDPATH=/home/httpsbuscwbcom/buscwb-backend
-- /bin/mkdir -p "$BACKENDPATH"
-- /bin/cp -R backend/. "$BACKENDPATH"/
-```
+    # Backend: copia os arquivos da aplicação
+    - export BACKENDPATH=/home/httpsbuscwbcom/buscwb-backend
+    - /bin/mkdir -p "$BACKENDPATH"
+    - /bin/cp -R backend/. "$BACKENDPATH"/
+
+    # Reinicia o Node.js App (Passenger)
+    - /bin/mkdir -p "$BACKENDPATH/tmp"
+    - /bin/touch "$BACKENDPATH/tmp/restart.txt"
