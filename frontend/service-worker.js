@@ -1,4 +1,4 @@
-const CACHE_NOME = "bus-cwb-cache-v6";
+const CACHE_NOME = "bus-cwb-cache-v8";
 
 const ARQUIVOS_PARA_CACHE = [
   "./",

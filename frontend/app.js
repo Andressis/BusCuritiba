@@ -57,6 +57,89 @@ async function buscarHorariosNaApi(idLinha, tipoDia) {
   return resposta.json();
 }
 
+/* ---------- PREVISÃO DE HORÁRIO NAS PARADAS (estimativa) ---------- */
+const VELOCIDADE_KMH = 18;
+const FATOR_CURVA = 1.3;
+
+function kmEntre(a, b) {
+  const raioTerraKm = 6371;
+  const radianos = (graus) => (graus * Math.PI) / 180;
+  const latitudeA = radianos(Number(a.lat));
+  const latitudeB = radianos(Number(b.lat));
+  const diferencaLatitude = latitudeB - latitudeA;
+  const diferencaLongitude = radianos(Number(b.lng) - Number(a.lng));
+  const haversine =
+    Math.sin(diferencaLatitude / 2) ** 2 +
+    Math.cos(latitudeA) *
+      Math.cos(latitudeB) *
+      Math.sin(diferencaLongitude / 2) ** 2;
+  return 2 * raioTerraKm * Math.asin(Math.min(1, Math.sqrt(haversine)));
+}
+
+function minutosAteAsParadas(pontos) {
+  const minutosPorParada = new Map();
+  let distanciaAcumulada = 0;
+
+  pontos.forEach((ponto, indice) => {
+    if (indice > 0) {
+      const anterior = pontos[indice - 1];
+      const coordenadasValidas = [anterior, ponto].every(
+        (parada) =>
+          parada.lat !== null &&
+          parada.lat !== "" &&
+          parada.lng !== null &&
+          parada.lng !== "" &&
+          Number.isFinite(Number(parada.lat)) &&
+          Number.isFinite(Number(parada.lng))
+      );
+      if (coordenadasValidas) {
+        distanciaAcumulada += kmEntre(anterior, ponto) * FATOR_CURVA;
+      }
+    }
+    minutosPorParada.set(String(ponto.num), (distanciaAcumulada / VELOCIDADE_KMH) * 60);
+  });
+
+  return minutosPorParada;
+}
+
+function agoraCuritiba() {
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    weekday: "short",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const valor = (tipo) => partes.find((parte) => parte.type === tipo)?.value;
+  const hora = Number(valor("hour"));
+  const minuto = Number(valor("minute"));
+  const diaSemana = valor("weekday");
+  const tipoDia =
+    diaSemana === "Sat" ? "sabado" : diaSemana === "Sun" ? "domingo" : "util";
+
+  return { minutos: hora * 60 + minuto, tipoDia };
+}
+
+function proximasPrevisoes(saidas, minutosAteParada, agora, qtd = 3) {
+  return saidas
+    .map((saida) => {
+      const correspondencia = /^(\d{2}):(\d{2})$/.exec(saida);
+      if (!correspondencia) return null;
+      const hora = Number(correspondencia[1]);
+      const minuto = Number(correspondencia[2]);
+      if (hora > 23 || minuto > 59) return null;
+      return Math.round(hora * 60 + minuto + minutosAteParada);
+    })
+    .filter((minutos) => minutos !== null && minutos >= agora && minutos < 1440)
+    .sort((a, b) => a - b)
+    .slice(0, qtd)
+    .map((minutos) => {
+      const hora = String(Math.floor(minutos / 60)).padStart(2, "0");
+      const minuto = String(minutos % 60).padStart(2, "0");
+      return `${hora}:${minuto}`;
+    });
+}
+
 async function iniciarMapa() {
   const status = document.getElementById("mapa-status");
 
@@ -180,6 +263,34 @@ async function selecionarLinhaMapa(id) {
       gruposPorDirecao[grupo.direcao].push(grupo);
     });
 
+    const { minutos: agora, tipoDia } = agoraCuritiba();
+    let pontosHorarios = [];
+    try {
+      const resultadoHorarios = await buscarHorariosNaApi(id, tipoDia);
+      pontosHorarios = Array.isArray(resultadoHorarios.pontos)
+        ? resultadoHorarios.pontos
+        : [];
+    } catch (erro) {
+      console.error(erro);
+    }
+    if (requisicaoAtual !== requisicaoMapa) return;
+
+    // SUPOSIÇÃO: 1º ponto = saída da ida, 2º = saída da volta; é um palpite a validar.
+    const obterSaidas = (ponto) =>
+      (Array.isArray(ponto?.horarios) ? ponto.horarios : [])
+        .map((horario) => horario?.hora)
+        .filter((hora) => typeof hora === "string");
+    const saidasIda = obterSaidas(pontosHorarios[0]);
+    const pontoSaidaVolta = pontosHorarios[1] || pontosHorarios[0];
+    const saidasVolta = obterSaidas(pontoSaidaVolta);
+    const saidasPorDirecao = { ida: saidasIda, volta: saidasVolta };
+    const offsets = new Map(
+      gruposOrdenados.map((grupo) => [
+        grupo.itinerario,
+        minutosAteAsParadas(grupo.pontos),
+      ])
+    );
+
     const primeiraParadaPorDirecao = {};
     Object.keys(gruposPorDirecao).forEach((direcao) => {
       primeiraParadaPorDirecao[direcao] = gruposPorDirecao[direcao]
@@ -219,15 +330,47 @@ async function selecionarLinhaMapa(id) {
         if (paradasExibidas.has(chaveParada)) return;
         paradasExibidas.add(chaveParada);
 
-        const popup = document.createElement("div");
-        popup.textContent = `${ponto.nome || "Parada"} / ${ponto.tipo || "não informado"} / ${grupo.direcao === "ida" ? "Ida" : "Volta"}: ${ponto.sentido || "não informado"}`;
         L.circleMarker([ponto.lat, ponto.lng], {
           radius: 5,
           fillColor: cores[grupo.direcao],
           color: "#FFFFFF",
           weight: 1.5,
           fillOpacity: 1,
-        }).bindPopup(popup).addTo(camadaPontos);
+        })
+          .bindPopup(() => {
+            const popup = document.createElement("div");
+            const nome = document.createElement("strong");
+            nome.textContent = ponto.nome || "Parada";
+            popup.append(nome, document.createElement("br"));
+            popup.append(
+              document.createTextNode(ponto.tipo || "não informado"),
+              document.createElement("br"),
+              document.createTextNode(
+                `${grupo.direcao === "ida" ? "Ida" : "Volta"}: ${ponto.sentido || "não informado"}`
+              ),
+              document.createElement("br")
+            );
+
+            const previsoes = proximasPrevisoes(
+              saidasPorDirecao[grupo.direcao],
+              offsets.get(grupo.itinerario)?.get(String(ponto.num)) ?? 0,
+              agoraCuritiba().minutos
+            );
+            if (previsoes.length) {
+              const horarios = document.createElement("strong");
+              horarios.textContent = `≈ ${previsoes.join(" · ")}`;
+              popup.append(horarios, document.createElement("br"));
+              const aviso = document.createElement("small");
+              aviso.textContent = "Horário estimado, pode variar";
+              popup.append(aviso);
+            } else {
+              const vazio = document.createElement("small");
+              vazio.textContent = "Sem mais previsões hoje";
+              popup.append(vazio);
+            }
+            return popup;
+          })
+          .addTo(camadaPontos);
         limites.push([ponto.lat, ponto.lng]);
       });
     });
