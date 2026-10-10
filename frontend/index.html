@@ -1,4 +1,4 @@
-<!-- Version = v1.0.2 -->
+<!-- Version = v1.0.4 -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 
@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Bus Cwb - Transporte Coletivo de Curitiba</title>
 
-  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-512.png" />
+  <link rel="icon" href="/favicon.ico?v=1.0.3" type="image/x-icon">
 
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#12372A" />
@@ -22,7 +22,7 @@
     rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
-  <link rel="stylesheet" href="style.css?v=1.0.2" />
+  <link rel="stylesheet" href="style.css?v=1.0.4" />
 </head>
 
 <body>
@@ -31,6 +31,7 @@
     <div class="header-content">
       <div class="logo-area">
         <span class="logo-marks">
+
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="4" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.6" />
             <line x1="4" y1="10.5" x2="20" y2="10.5" stroke="currentColor" stroke-width="1.6" />
@@ -41,8 +42,10 @@
           </svg>
         </span>
         <div class="titles">
+
           <h1>Bus Cwb</h1>
           <p>Transporte coletivo de Curitiba</p>
+
         </div>
       </div>
       <button id="btn-instalar-app" class="btn-instalar-app oculto" type="button" aria-label="Instalar Bus Cwb">
@@ -91,14 +94,14 @@
 
     <section id="tela-mapa" class="tela">
       <div class="mapa-busca">
-        <input id="mapa-busca" class="select-ponto" type="text"
-          placeholder="Digite o número ou nome da linha" autocomplete="off" />
+        <input id="mapa-busca" class="select-ponto" type="text" placeholder="Digite o número ou nome da linha"
+          autocomplete="off" />
         <div id="mapa-sugestoes" class="sugestoes oculto"></div>
       </div>
       <div id="mapa" class="mapa"></div>
       <div id="mapa-legenda" class="mapa-legenda oculto">
-        <div><span class="leg-cor" style="background-color: #1B8A3C"></span> Ida <small id="leg-ida"></small></div>
-        <div><span class="leg-cor" style="background-color: #D32F2F"></span> Volta <small id="leg-volta"></small></div>
+        <div><span class="leg-cor" style="background-color: #0ce64d"></span> Ida <small id="leg-ida"></small></div>
+        <div><span class="leg-cor" style="background-color: #f30707"></span> Volta <small id="leg-volta"></small></div>
       </div>
       <p class="mensagem-vazia" id="mapa-status" role="status" aria-live="polite">
         Digite o número ou o nome de uma linha para ver o trajeto.
@@ -195,7 +198,7 @@
     </button>
   </nav>
 
-  <script src="app.js?v=1.0.2"></script>
+  <script src="app.js?v=1.0.4"></script>
 </body>
 
 </html>
