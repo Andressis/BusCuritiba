@@ -102,19 +102,19 @@
       <div id="busca-paradas" class="busca-paradas oculto">
         <input id="input-busca-paradas" type="search" placeholder="Digite o nome ou número da parada" autocomplete="off" />
         <div id="resultados-busca-paradas" class="lista-paradas" aria-live="polite"></div>
+
+        <section class="secao">
+          <div class="secao-titulo"><h2>Paradas perto de mim</h2></div>
+          <button id="btn-localizacao" class="botao-secundario" type="button">Usar minha localização</button>
+          <div id="lista-paradas-proximas" class="lista-paradas" aria-live="polite"></div>
+        </section>
+
+        <section class="secao">
+          <div class="secao-titulo"><h2>Paradas favoritas</h2></div>
+          <div id="lista-paradas-favoritas-inicio" class="lista-paradas"></div>
+          <p id="msg-paradas-favoritas-inicio" class="mensagem-vazia">Toque na estrela de uma parada para adicioná-la aos favoritos.</p>
+        </section>
       </div>
-
-      <section class="secao">
-        <div class="secao-titulo"><h2>Paradas perto de mim</h2></div>
-        <button id="btn-localizacao" class="botao-secundario" type="button">Usar minha localização</button>
-        <div id="lista-paradas-proximas" class="lista-paradas" aria-live="polite"></div>
-      </section>
-
-      <section class="secao">
-        <div class="secao-titulo"><h2>Paradas favoritas</h2></div>
-        <div id="lista-paradas-favoritas-inicio" class="lista-paradas"></div>
-        <p id="msg-paradas-favoritas-inicio" class="mensagem-vazia">Toque na estrela de uma parada para adicioná-la aos favoritos.</p>
-      </section>
 
       <section class="secao" id="secao-linhas-favoritas">
         <div class="secao-titulo">

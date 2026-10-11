@@ -12,7 +12,6 @@ let mapa = null;
 let grupoIda = null;
 let grupoVolta = null;
 let marcadorUsuario = null;
-let circuloPrecisaoUsuario = null;
 let marcadorParadaSelecionada = null;
 let ultimaLocalizacao = null;
 let requisicaoMapa = 0;
@@ -152,8 +151,58 @@ async function preCarregarHorarios(idLinha) {
   }));
 }
 /* ---------- PREVISÃO DE HORÁRIO NAS PARADAS (estimativa) ---------- */
-const VELOCIDADE_KMH = 18;
+const VELOCIDADE_PADRAO_KMH = 22;
+const VELOCIDADE_RAPIDA_KMH = 28;
 const FATOR_CURVA = 1.3;
+const FATOR_PICO_TRANSITO = 0.80;
+const FATOR_MADRUGADA = 1.15;
+const FATOR_FIM_DE_SEMANA = 1.05;
+// Faixas do pico em dia útil, com início e fim inclusivos (minutos após meia-noite).
+const FAIXAS_PICO_UTIL = [
+  { inicio: 6 * 60 + 30, fim: 9 * 60 },
+  { inicio: 17 * 60, fim: 19 * 60 + 30 },
+];
+// A madrugada cruza a meia-noite: 23:00 até antes de 05:00.
+const INICIO_MADRUGADA = 23 * 60;
+const FIM_MADRUGADA = 5 * 60;
+// Categorias que recebem a velocidade rápida; ajustar esta lista conforme necessário.
+const CATEGORIAS_VELOCIDADE_RAPIDA = [
+  "EXPRESSO",
+  "LIGEIRAO",
+  "LIGEIRINHO",
+  "TRONCAL",
+  "DIRETA",
+];
+
+function fatorTransito(minutoDoDia, tipoDia) {
+  if (
+    tipoDia === "util" &&
+    FAIXAS_PICO_UTIL.some(
+      (faixa) => minutoDoDia >= faixa.inicio && minutoDoDia <= faixa.fim
+    )
+  ) {
+    return FATOR_PICO_TRANSITO;
+  }
+  if (minutoDoDia >= INICIO_MADRUGADA || minutoDoDia < FIM_MADRUGADA) {
+    return FATOR_MADRUGADA;
+  }
+  if (tipoDia === "sabado" || tipoDia === "domingo") {
+    return FATOR_FIM_DE_SEMANA;
+  }
+  return 1;
+}
+
+function velocidadeDaLinha(linha) {
+  const categoria = String(linha?.categoria_servico || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+  return CATEGORIAS_VELOCIDADE_RAPIDA.some((termo) =>
+    categoria.includes(termo)
+  )
+    ? VELOCIDADE_RAPIDA_KMH
+    : VELOCIDADE_PADRAO_KMH;
+}
 
 function kmEntre(a, b) {
   const raioTerraKm = 6371;
@@ -170,7 +219,7 @@ function kmEntre(a, b) {
   return 2 * raioTerraKm * Math.asin(Math.min(1, Math.sqrt(haversine)));
 }
 
-function minutosAteAsParadas(pontos) {
+function minutosAteAsParadas(pontos, velocidadeKmh = VELOCIDADE_PADRAO_KMH) {
   const minutosPorParada = new Map();
   let distanciaAcumulada = 0;
 
@@ -190,7 +239,7 @@ function minutosAteAsParadas(pontos) {
         distanciaAcumulada += kmEntre(anterior, ponto) * FATOR_CURVA;
       }
     }
-    minutosPorParada.set(String(ponto.num), (distanciaAcumulada / VELOCIDADE_KMH) * 60);
+    minutosPorParada.set(String(ponto.num), (distanciaAcumulada / velocidadeKmh) * 60);
   });
 
   return minutosPorParada;
@@ -214,7 +263,7 @@ function agoraCuritiba() {
   return { minutos: hora * 60 + minuto, tipoDia };
 }
 
-function proximasPrevisoes(saidas, minutosAteParada, agora, qtd = 3) {
+function calcularPrevisoes(saidas, minutosAteParada, agora, tipoDia, qtd = 3) {
   return saidas
     .map((saida) => {
       const correspondencia = /^(\d{2}):(\d{2})$/.exec(saida);
@@ -222,16 +271,45 @@ function proximasPrevisoes(saidas, minutosAteParada, agora, qtd = 3) {
       const hora = Number(correspondencia[1]);
       const minuto = Number(correspondencia[2]);
       if (hora > 23 || minuto > 59) return null;
-      return Math.round(hora * 60 + minuto + minutosAteParada);
+      const saidaMin = hora * 60 + minuto;
+      const fator = fatorTransito(saidaMin, tipoDia);
+      const deslocamento = minutosAteParada / fator;
+      return { minutos: Math.round(saidaMin + deslocamento), fator };
     })
-    .filter((minutos) => minutos !== null && minutos >= agora && minutos < 1440)
-    .sort((a, b) => a - b)
-    .slice(0, qtd)
-    .map((minutos) => {
-      const hora = String(Math.floor(minutos / 60)).padStart(2, "0");
-      const minuto = String(minutos % 60).padStart(2, "0");
-      return `${hora}:${minuto}`;
-    });
+    .filter((previsao) =>
+      previsao !== null && previsao.minutos >= agora && previsao.minutos < 1440
+    )
+    .sort((a, b) => a.minutos - b.minutos)
+    .slice(0, qtd);
+}
+
+function formatarMinuto(minutos) {
+  const hora = String(Math.floor(minutos / 60)).padStart(2, "0");
+  const minuto = String(minutos % 60).padStart(2, "0");
+  return `${hora}:${minuto}`;
+}
+
+function proximasPrevisoes(saidas, minutosAteParada, agora, tipoDia, qtd = 3) {
+  return calcularPrevisoes(saidas, minutosAteParada, agora, tipoDia, qtd)
+    .map((previsao) => formatarMinuto(previsao.minutos));
+}
+
+function avisoFatorTransito(fator) {
+  if (fator < 1) return "Pico de trânsito";
+  if (fator === FATOR_MADRUGADA) return "Madrugada";
+  if (fator === FATOR_FIM_DE_SEMANA) return "Fim de semana";
+  return "";
+}
+
+function obterFatorPrimeiraPrevisao(saidas, minutosAteParada, agora, tipoDia) {
+  const primeiraPrevisao = calcularPrevisoes(
+    saidas,
+    minutosAteParada,
+    agora,
+    tipoDia,
+    1
+  )[0];
+  return primeiraPrevisao?.fator ?? 1;
 }
 
 async function iniciarMapa() {
@@ -312,7 +390,7 @@ function configurarBuscaMapa() {
               requisicaoBuscaMapa += 1;
               input.value = `${linha.numero} · ${linha.nome}`;
               sugestoes.classList.add("oculto");
-              selecionarLinhaMapa(linha.id);
+              selecionarLinhaMapa(linha.id, linha);
             });
             sugestoes.appendChild(botao);
           });
@@ -332,7 +410,12 @@ function configurarBuscaMapa() {
   });
 }
 
-async function selecionarLinhaMapa(id) {
+async function selecionarLinhaMapa(idLinha, linhaInformada) {
+  const linhaAtual =
+    linhaInformada ||
+    obterLinhaPorId(idLinha) ||
+    LINHAS.find((linha) => String(linha.id) === String(idLinha));
+  const velocidade = velocidadeDaLinha(linhaAtual);
   const status = document.getElementById("mapa-status");
   const legenda = document.getElementById("mapa-legenda");
   const requisicaoAtual = ++requisicaoMapa;
@@ -347,7 +430,7 @@ async function selecionarLinhaMapa(id) {
 
   status.textContent = "Carregando trajeto e paradas...";
   try {
-    const codigoUrl = encodeURIComponent(id);
+    const codigoUrl = encodeURIComponent(idLinha);
     const [respostaShape, respostaPontos] = await Promise.all([
       buscarJsonApi(`${API_BASE_URL}/mapa/linhas/${codigoUrl}/shape`),
       buscarJsonApi(`${API_BASE_URL}/mapa/linhas/${codigoUrl}/pontos`),
@@ -379,7 +462,7 @@ async function selecionarLinhaMapa(id) {
     let pontosHorarios = [];
     let erroHorarios = false;
     try {
-      const resultadoHorarios = await buscarHorariosNaApi(id, tipoDia);
+      const resultadoHorarios = await buscarHorariosNaApi(idLinha, tipoDia);
       pontosHorarios = Array.isArray(resultadoHorarios.pontos)
         ? resultadoHorarios.pontos
         : [];
@@ -401,7 +484,7 @@ async function selecionarLinhaMapa(id) {
     const offsets = new Map(
       gruposOrdenados.map((grupo) => [
         grupo.itinerario,
-        minutosAteAsParadas(grupo.pontos),
+        minutosAteAsParadas(grupo.pontos, velocidade),
       ])
     );
 
@@ -465,11 +548,14 @@ async function selecionarLinhaMapa(id) {
               ),
               document.createElement("br")
             );
-
+            const momentoAtual = agoraCuritiba();
+            const minutosAteParada =
+              offsets.get(grupo.itinerario)?.get(String(ponto.num)) ?? 0;
             const previsoes = proximasPrevisoes(
               saidasPorDirecao[grupo.direcao],
-              offsets.get(grupo.itinerario)?.get(String(ponto.num)) ?? 0,
-              agoraCuritiba().minutos
+              minutosAteParada,
+              momentoAtual.minutos,
+              momentoAtual.tipoDia
             );
             if (previsoes.length) {
               const horarios = document.createElement("strong");
@@ -477,7 +563,21 @@ async function selecionarLinhaMapa(id) {
               popup.append(horarios, document.createElement("br"));
               const aviso = document.createElement("small");
               aviso.textContent = "Horário estimado, pode variar";
-              popup.append(aviso);
+              const avisoVelocidade = document.createElement("small");
+              avisoVelocidade.textContent = ` (~${velocidade} km/h)`;
+              popup.append(aviso, avisoVelocidade);
+              const fatorPrimeiraPrevisao = obterFatorPrimeiraPrevisao(
+                saidasPorDirecao[grupo.direcao],
+                minutosAteParada,
+                momentoAtual.minutos,
+                momentoAtual.tipoDia
+              );
+              const avisoTransito = avisoFatorTransito(fatorPrimeiraPrevisao);
+              if (avisoTransito) {
+                const textoTransito = document.createElement("small");
+                textoTransito.textContent = ` · ${avisoTransito}`;
+                popup.append(textoTransito);
+              }
             } else {
               const vazio = document.createElement("small");
               vazio.textContent = "Sem mais previsões hoje";
@@ -644,6 +744,14 @@ function obterLocalizacaoUsuario() {
           lng: posicao.coords.longitude,
           accuracy: posicao.coords.accuracy,
         };
+        if (
+          !Number.isFinite(ultimaLocalizacao.lat) ||
+          !Number.isFinite(ultimaLocalizacao.lng) ||
+          !Number.isFinite(ultimaLocalizacao.accuracy)
+        ) {
+          reject(new Error("O aparelho retornou coordenadas de localização inválidas."));
+          return;
+        }
         resolve(ultimaLocalizacao);
       },
       (erro) => {
@@ -654,7 +762,7 @@ function obterLocalizacaoUsuario() {
         };
         reject(new Error(mensagens[erro.code] || "Não foi possível obter sua localização."));
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
     );
   });
 }
@@ -674,10 +782,16 @@ async function carregarParadasProximas(localizacao, raio = 500) {
     });
     const resultado = await buscarParadasNaApi(`/proximas?${consulta}`);
     container.replaceChildren();
+    const precisao = document.createElement("p");
+    precisao.className = "parada-distancia";
+    precisao.textContent = `Precisão aproximada da localização: ±${formatarDistancia(Math.round(localizacao.accuracy))}.`;
+    container.appendChild(precisao);
     if (!resultado.paradas?.length) {
       const aviso = document.createElement("p");
       aviso.className = "mensagem-vazia";
-      aviso.textContent = raio < 2000
+      aviso.textContent = localizacao.accuracy > 100
+        ? `Nenhuma parada encontrada em ${formatarDistancia(raio)}. A localização recebida tem precisão limitada; ative a localização precisa/GPS do aparelho e tente novamente.`
+        : raio < 2000
         ? `Nenhuma parada encontrada em ${formatarDistancia(raio)}.`
         : "Nenhuma parada encontrada em até 2 km da sua localização.";
       container.appendChild(aviso);
@@ -727,22 +841,14 @@ async function usarLocalizacaoParaParadas() {
 
 function mostrarLocalizacaoNoMapa(localizacao) {
   if (!mapa) iniciarMapa();
-  if (circuloPrecisaoUsuario) mapa.removeLayer(circuloPrecisaoUsuario);
   if (marcadorUsuario) mapa.removeLayer(marcadorUsuario);
-  circuloPrecisaoUsuario = L.circle([localizacao.lat, localizacao.lng], {
-    radius: localizacao.accuracy,
-    color: "#2878D0",
-    fillColor: "#2878D0",
-    fillOpacity: 0.12,
-    weight: 1,
-  }).addTo(mapa);
   marcadorUsuario = L.circleMarker([localizacao.lat, localizacao.lng], {
     radius: 7,
     color: "#FFFFFF",
     weight: 2,
     fillColor: "#2878D0",
     fillOpacity: 1,
-  }).bindPopup("Você está aqui").addTo(mapa);
+  }).bindPopup(`Você está aqui · precisão aproximada ±${formatarDistancia(Math.round(localizacao.accuracy))}`).addTo(mapa);
   mapa.setView([localizacao.lat, localizacao.lng], 16);
   marcadorUsuario.openPopup();
 }

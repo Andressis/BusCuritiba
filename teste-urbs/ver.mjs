@@ -1,11 +1,25 @@
 ﻿import pkg from "xz-decompress";
 const { XzReadableStream } = pkg;
-const base = "http://dadosabertos.c3sl.ufpr.br/curitibaurbs/2026_10_03_";
-const r = await fetch(base + "tabelaLinha.json.xz");
-const lista = JSON.parse(await new Response(new XzReadableStream(r.body)).text());
-const conta = (campo, arr) => arr.reduce((o, x) => (o[x[campo]] = (o[x[campo]] || 0) + 1, o), {});
-console.log("DIA:", conta("DIA", lista));
-console.log("ADAPT:", conta("ADAPT", lista));
-const l050 = lista.filter((x) => x.COD === "050");
-console.log("Pontos distintos da 050:", new Set(l050.map((x) => x.NUM)).size);
-console.log("Por ponto:", conta("PONTO", l050));
+import readline from "node:readline";
+import { Readable } from "node:stream";
+
+const r = await fetch("http://dadosabertos.c3sl.ufpr.br/curitibaurbs/2026_10_10_veiculos.json.xz");
+const rl = readline.createInterface({ input: Readable.fromWeb(new XzReadableStream(r.body)) });
+
+const conv = (s) => { const [d, h] = s.split(" "); const [dd, mm, aa] = d.split("/"); return new Date(`${aa}-${mm}-${dd}T${h}`).getTime(); };
+let anterior = null, trocas = 0, juntos = true, decresc = 0, cresc = 0, n = 0;
+const vistos = new Set();
+for await (const linha of rl) {
+  if (!linha.trim()) continue;
+  const v = JSON.parse(linha);
+  if (anterior && anterior.VEIC === v.VEIC) {
+    conv(v.DTHR) < conv(anterior.DTHR) ? decresc++ : cresc++;
+  } else {
+    if (vistos.has(v.VEIC)) juntos = false;
+    vistos.add(v.VEIC);
+    trocas++;
+  }
+  anterior = v;
+  if (++n >= 600000) break;
+}
+console.log({ amostra: n, trocasDeVeiculo: trocas, veiculosSempreJuntos: juntos, decrescente: decresc, crescente: cresc });
