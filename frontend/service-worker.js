@@ -1,4 +1,4 @@
-const CACHE_NOME = "bus-cwb-cache-v12";
+const CACHE_NOME = "bus-cwb-cache-v13";
 const CACHE_API = "bus-cwb-api-v1";
 const CACHE_TILES = "bus-cwb-tiles-v2";
 const ARQUIVOS_PARA_CACHE = [
@@ -7,8 +7,12 @@ const ARQUIVOS_PARA_CACHE = [
   "./style.css",
   "./app.js",
   "./manifest.json",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
+  "./favicon/favicon.ico",
+  "./favicon/favicon-16x16.png",
+  "./favicon/favicon-32x32.png",
+  "./favicon/apple-touch-icon.png",
+  "./favicon/android-chrome-192x192.png",
+  "./favicon/android-chrome-512x512.png",
   "./assets/onibus-header.jpg",
   "./vendor/leaflet.css",
   "./vendor/leaflet.js",
