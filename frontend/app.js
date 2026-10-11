@@ -2,27 +2,47 @@ const API_BASE_URL = "https://api.buscwb.com.br/api";
 
 /* ---------- ESTADO DA APLICAÇÃO ---------- */
 let LINHAS = []; // cache local das linhas carregadas da API
+let LINHAS_EXIBIDAS = [];
+let LINHAS_CARREGADAS = false;
 let linhaSelecionadaId = null;
 let tipoDiaSelecionado = "util"; // util | sabado | domingo
 let pontosLinhaAtual = []; // [{ nome, horarios: [{hora, adapt}] }]
 let pontoSelecionado = null;
 let mapa = null;
-let camadaRota = null;
-let camadaPontos = null;
+let grupoIda = null;
+let grupoVolta = null;
+let marcadorUsuario = null;
+let circuloPrecisaoUsuario = null;
+let marcadorParadaSelecionada = null;
+let ultimaLocalizacao = null;
 let requisicaoMapa = 0;
 let debounceBuscaMapa = null;
 let requisicaoBuscaMapa = 0;
+let debounceBuscaParadas = null;
+let requisicaoBuscaParadas = 0;
+let temporizadorAvisoCache = null;
+let temporizadorAvisoErro = null;
 
 /* ---------- FAVORITOS (localStorage) ---------- */
 const CHAVE_FAVORITOS = "buscwb_favoritos";
 
 function obterFavoritos() {
-  const dados = localStorage.getItem(CHAVE_FAVORITOS);
-  return dados ? JSON.parse(dados) : [];
+  try {
+    const dados = localStorage.getItem(CHAVE_FAVORITOS);
+    const favoritos = dados ? JSON.parse(dados) : [];
+    return Array.isArray(favoritos) ? favoritos : [];
+  } catch (erro) {
+    console.error("Não foi possível ler as linhas favoritas:", erro);
+    return [];
+  }
 }
 
 function salvarFavoritos(lista) {
-  localStorage.setItem(CHAVE_FAVORITOS, JSON.stringify(lista));
+  try {
+    localStorage.setItem(CHAVE_FAVORITOS, JSON.stringify(lista));
+  } catch (erro) {
+    console.error("Não foi possível salvar as linhas favoritas:", erro);
+  }
 }
 
 function ehFavorita(idLinha) {
@@ -37,26 +57,100 @@ function alternarFavorito(idLinha) {
     favoritos.push(idLinha);
   }
   salvarFavoritos(favoritos);
+  if (favoritos.includes(idLinha)) preCarregarHorarios(idLinha);
   renderizarTudo();
 }
 
 /* ---------- CHAMADAS À API ---------- */
+const PREFIXO_CACHE_API = "buscwb_api_cache_v1:";
+
+function obterChaveCacheApi(url) {
+  const consulta = new URL(url);
+  if (consulta.pathname.endsWith("/mapa/paradas/proximas")) {
+    ["lat", "lng"].forEach((coordenada) => {
+      const valor = Number(consulta.searchParams.get(coordenada));
+      if (Number.isFinite(valor)) consulta.searchParams.set(coordenada, valor.toFixed(3));
+    });
+  }
+  return `${PREFIXO_CACHE_API}${consulta.toString()}`;
+}
+
+function mostrarAvisoDadosSalvos(exibir) {
+  const aviso = document.getElementById("aviso-dados-salvos");
+  if (!aviso) return;
+  aviso.classList.toggle("oculto", !exibir);
+  clearTimeout(temporizadorAvisoCache);
+  if (exibir) {
+    temporizadorAvisoCache = setTimeout(() => aviso.classList.add("oculto"), 5000);
+  }
+}
+
+function mostrarErroApi(mensagem) {
+  const aviso = document.getElementById("aviso-erro");
+  aviso.textContent = mensagem;
+  aviso.classList.remove("oculto");
+  clearTimeout(temporizadorAvisoErro);
+  temporizadorAvisoErro = setTimeout(() => aviso.classList.add("oculto"), 6000);
+}
+
+async function buscarJsonApi(url) {
+  const chaveCache = obterChaveCacheApi(url);
+  try {
+    const controlador = new AbortController();
+    const temporizador = setTimeout(() => controlador.abort(), 4000);
+    let resposta;
+    try {
+      resposta = await fetch(url, { signal: controlador.signal });
+    } finally {
+      clearTimeout(temporizador);
+    }
+    if (!resposta.ok && resposta.status !== 503) {
+      throw new Error(`A API respondeu HTTP ${resposta.status}.`);
+    }
+    if (resposta.status === 503) throw new Error("A API está indisponível.");
+    const dados = await resposta.json();
+    try {
+      localStorage.setItem(chaveCache, JSON.stringify(dados));
+    } catch (erro) {
+      console.warn("Não foi possível guardar esta resposta para uso offline:", erro);
+    }
+    mostrarAvisoDadosSalvos(resposta.headers.get("X-Dados-Salvos") === "true");
+    return dados;
+  } catch (erro) {
+    if (erro.message.startsWith("A API respondeu HTTP")) throw erro;
+    try {
+      const salvo = localStorage.getItem(chaveCache);
+      if (salvo) {
+        mostrarAvisoDadosSalvos(true);
+        return JSON.parse(salvo);
+      }
+    } catch (erroCache) {
+      console.error("Não foi possível ler os dados salvos da API:", erroCache);
+    }
+    throw new Error(`Não foi possível conectar à API e não há dados salvos para esta consulta. ${erro.message}`);
+  }
+}
 
 async function buscarLinhasNaApi(termoBusca = "") {
   const url = new URL(`${API_BASE_URL}/linhas`);
   if (termoBusca) url.searchParams.set("busca", termoBusca);
-  const resposta = await fetch(url);
-  if (!resposta.ok) throw new Error("Falha ao buscar linhas na API.");
-  return resposta.json();
+  return buscarJsonApi(url.toString());
 }
 
 async function buscarHorariosNaApi(idLinha, tipoDia) {
   const url = `${API_BASE_URL}/linhas/${idLinha}/horarios?tipoDia=${tipoDia}`;
-  const resposta = await fetch(url);
-  if (!resposta.ok) throw new Error("Falha ao buscar horários na API.");
-  return resposta.json();
+  return buscarJsonApi(url);
 }
 
+async function preCarregarHorarios(idLinha) {
+  await Promise.all(["util", "sabado", "domingo"].map(async (tipoDia) => {
+    try {
+      await buscarHorariosNaApi(idLinha, tipoDia);
+    } catch (erro) {
+      console.warn(`Não foi possível pré-carregar horários (${tipoDia}) da linha ${idLinha}:`, erro);
+    }
+  }));
+}
 /* ---------- PREVISÃO DE HORÁRIO NAS PARADAS (estimativa) ---------- */
 const VELOCIDADE_KMH = 18;
 const FATOR_CURVA = 1.3;
@@ -150,16 +244,36 @@ async function iniciarMapa() {
 
   if (!mapa) {
     mapa = L.map("mapa").setView([-25.4284, -49.2733], 12);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    L.tileLayer("https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · <a href="https://www.openstreetmap.fr/">OpenStreetMap France (HOT)</a>',
     }).addTo(mapa);
-    camadaRota = L.layerGroup().addTo(mapa);
-    camadaPontos = L.layerGroup().addTo(mapa);
+    grupoIda = L.layerGroup().addTo(mapa);
+    grupoVolta = L.layerGroup().addTo(mapa);
     configurarBuscaMapa();
+    configurarFiltrosLegenda();
   }
 
   setTimeout(() => mapa.invalidateSize(), 150);
+}
+
+function configurarFiltrosLegenda() {
+  [["ida", grupoIda], ["volta", grupoVolta]].forEach(([direcao, grupo]) => {
+    const botao = document.getElementById(`btn-leg-${direcao}`);
+    botao.addEventListener("click", () => {
+      const idaVisivel = document.getElementById("btn-leg-ida").getAttribute("aria-pressed") === "true";
+      const voltaVisivel = document.getElementById("btn-leg-volta").getAttribute("aria-pressed") === "true";
+      const visivel = botao.getAttribute("aria-pressed") === "true";
+      if (visivel && (direcao === "ida" ? !voltaVisivel : !idaVisivel)) {
+        document.getElementById("mapa-status").textContent = "Nenhum sentido selecionado";
+        return;
+      }
+      botao.setAttribute("aria-pressed", String(!visivel));
+      if (visivel) mapa.removeLayer(grupo);
+      else grupo.addTo(mapa);
+      document.getElementById("mapa-status").textContent = "";
+    });
+  });
 }
 
 function configurarBuscaMapa() {
@@ -222,25 +336,23 @@ async function selecionarLinhaMapa(id) {
   const status = document.getElementById("mapa-status");
   const legenda = document.getElementById("mapa-legenda");
   const requisicaoAtual = ++requisicaoMapa;
-  camadaRota.clearLayers();
-  camadaPontos.clearLayers();
+  grupoIda.clearLayers();
+  grupoVolta.clearLayers();
+  grupoIda.addTo(mapa);
+  grupoVolta.addTo(mapa);
+  ["ida", "volta"].forEach((direcao) => {
+    document.getElementById(`btn-leg-${direcao}`).setAttribute("aria-pressed", "true");
+  });
   legenda.classList.add("oculto");
 
   status.textContent = "Carregando trajeto e paradas...";
   try {
     const codigoUrl = encodeURIComponent(id);
     const [respostaShape, respostaPontos] = await Promise.all([
-      fetch(`${API_BASE_URL}/mapa/linhas/${codigoUrl}/shape`),
-      fetch(`${API_BASE_URL}/mapa/linhas/${codigoUrl}/pontos`),
+      buscarJsonApi(`${API_BASE_URL}/mapa/linhas/${codigoUrl}/shape`),
+      buscarJsonApi(`${API_BASE_URL}/mapa/linhas/${codigoUrl}/pontos`),
     ]);
-    if (!respostaShape.ok || !respostaPontos.ok) {
-      throw new Error("Falha ao buscar trajeto ou paradas da linha.");
-    }
-
-    const [dadosShape, dadosPontos] = await Promise.all([
-      respostaShape.json(),
-      respostaPontos.json(),
-    ]);
+    const [dadosShape, dadosPontos] = [respostaShape, respostaPontos];
     if (requisicaoAtual !== requisicaoMapa) return;
 
     const itinerarios = new Map();
@@ -265,6 +377,7 @@ async function selecionarLinhaMapa(id) {
 
     const { minutos: agora, tipoDia } = agoraCuritiba();
     let pontosHorarios = [];
+    let erroHorarios = false;
     try {
       const resultadoHorarios = await buscarHorariosNaApi(id, tipoDia);
       pontosHorarios = Array.isArray(resultadoHorarios.pontos)
@@ -272,6 +385,7 @@ async function selecionarLinhaMapa(id) {
         : [];
     } catch (erro) {
       console.error(erro);
+      erroHorarios = true;
     }
     if (requisicaoAtual !== requisicaoMapa) return;
 
@@ -319,7 +433,8 @@ async function selecionarLinhaMapa(id) {
     const limites = [];
     const cores = { ida: "#1B8A3C", volta: "#D32F2F" };
     trechos.forEach((trecho, indice) => {
-      L.polyline(trecho.pontos, { color: cores[direcoesTrechos[indice]], weight: 4 }).addTo(camadaRota);
+      const grupo = direcoesTrechos[indice] === "ida" ? grupoIda : grupoVolta;
+      L.polyline(trecho.pontos, { color: cores[direcoesTrechos[indice]], weight: 4 }).addTo(grupo);
       limites.push(...trecho.pontos);
     });
 
@@ -370,7 +485,7 @@ async function selecionarLinhaMapa(id) {
             }
             return popup;
           })
-          .addTo(camadaPontos);
+          .addTo(grupo.direcao === "ida" ? grupoIda : grupoVolta);
         limites.push([ponto.lat, ponto.lng]);
       });
     });
@@ -382,13 +497,359 @@ async function selecionarLinhaMapa(id) {
     mapa.invalidateSize();
     if (limites.length) mapa.fitBounds(L.latLngBounds(limites), { padding: [20, 20] });
     status.textContent = paradasExibidas.size
-      ? `${paradasExibidas.size} paradas encontradas.`
+      ? `${paradasExibidas.size} paradas encontradas.${erroHorarios ? " Não foi possível carregar os horários." : ""}`
       : "Nenhuma parada encontrada para esta linha.";
   } catch (erro) {
     if (requisicaoAtual !== requisicaoMapa) return;
     console.error(erro);
     status.textContent = "Não foi possível carregar o trajeto e as paradas desta linha.";
   }
+}
+
+/* ---------- PARADAS, LOCALIZAÇÃO E FAVORITOS ---------- */
+const CHAVE_PARADAS_FAVORITAS = "buscwb_paradas_favoritas";
+
+function obterParadasFavoritas() {
+  try {
+    const dados = localStorage.getItem(CHAVE_PARADAS_FAVORITAS);
+    const favoritos = dados ? JSON.parse(dados) : [];
+    return Array.isArray(favoritos) ? favoritos.map(String) : [];
+  } catch (erro) {
+    console.error("Não foi possível ler as paradas favoritas:", erro);
+    return [];
+  }
+}
+
+function salvarParadasFavoritas(favoritos) {
+  try {
+    localStorage.setItem(CHAVE_PARADAS_FAVORITAS, JSON.stringify(favoritos));
+  } catch (erro) {
+    console.error("Não foi possível salvar as paradas favoritas:", erro);
+  }
+}
+
+function ehParadaFavorita(num) {
+  return obterParadasFavoritas().includes(String(num));
+}
+
+function alternarParadaFavorita(num) {
+  const numero = String(num);
+  let favoritos = obterParadasFavoritas();
+  favoritos = favoritos.includes(numero)
+    ? favoritos.filter((favorito) => favorito !== numero)
+    : [...favoritos, numero];
+  salvarParadasFavoritas(favoritos);
+  document.querySelectorAll(".btn-favoritar-parada").forEach((botao) => {
+    if (botao.dataset.num !== numero) return;
+    const favoritada = favoritos.includes(numero);
+    botao.classList.toggle("favoritado", favoritada);
+    botao.setAttribute("aria-pressed", String(favoritada));
+    botao.setAttribute("aria-label", favoritada ? "Remover parada dos favoritos" : "Favoritar parada");
+  });
+  renderizarFavoritasParadas("lista-paradas-favoritas-inicio", "msg-paradas-favoritas-inicio");
+  renderizarFavoritasParadas("lista-paradas-favoritas-tela", "msg-paradas-favoritas-tela");
+}
+
+async function buscarParadasNaApi(caminho) {
+  return buscarJsonApi(`${API_BASE_URL}/mapa/paradas${caminho}`);
+}
+
+function formatarDistancia(distanciaM) {
+  if (distanciaM < 1000) return `${distanciaM} m`;
+  return `${(distanciaM / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km`;
+}
+
+async function abrirLinhaPorCodigo(codigo) {
+  let linha = obterLinhaPorId(String(codigo));
+  if (!linha) {
+    try {
+      const linhas = await buscarLinhasNaApi(String(codigo));
+      linha = linhas.find((item) => String(item.id) === String(codigo)) || linhas[0];
+      if (linha && !obterLinhaPorId(linha.id)) LINHAS.push(linha);
+    } catch (erro) {
+      console.error(erro);
+      mostrarErroApi(`Não foi possível abrir os detalhes da linha. ${erro.message}`);
+      return;
+    }
+  }
+  if (linha) abrirModalLinha(linha.id);
+  else mostrarErroApi("A linha desta parada não foi encontrada.");
+}
+
+function criarChipLinha(codigo) {
+  const botao = document.createElement("button");
+  botao.type = "button";
+  botao.className = "chip-linha";
+  botao.textContent = String(codigo);
+  botao.setAttribute("aria-label", `Abrir linha ${codigo}`);
+  botao.addEventListener("click", () => abrirLinhaPorCodigo(codigo));
+  return botao;
+}
+
+function criarCardParada(parada, { distanciaM, mostrarMapa = false } = {}) {
+  const card = document.createElement("article");
+  card.className = "parada-card";
+  const info = document.createElement("div");
+  info.className = "parada-info";
+  const nome = document.createElement("h3");
+  nome.textContent = parada.nome || "Parada";
+  const detalhe = document.createElement("p");
+  detalhe.textContent = [parada.tipo || "Tipo não informado", `Parada ${parada.num}`].join(" · ");
+  info.append(nome, detalhe);
+  if (Number.isFinite(distanciaM)) {
+    const distancia = document.createElement("p");
+    distancia.className = "parada-distancia";
+    distancia.textContent = formatarDistancia(distanciaM);
+    info.appendChild(distancia);
+  }
+  const chips = document.createElement("div");
+  chips.className = "chips-linhas";
+  (parada.linhas || []).forEach((linha) => chips.appendChild(criarChipLinha(linha.cod)));
+  if (chips.childElementCount) info.appendChild(chips);
+
+  if (mostrarMapa) {
+    const botaoMapa = document.createElement("button");
+    botaoMapa.type = "button";
+    botaoMapa.className = "btn-ver-mapa";
+    botaoMapa.textContent = "Ver no mapa";
+    botaoMapa.addEventListener("click", () => abrirParadaNoMapa(parada));
+    info.appendChild(botaoMapa);
+  }
+
+  const acoes = document.createElement("div");
+  acoes.className = "parada-acoes";
+  const estrela = document.createElement("button");
+  estrela.type = "button";
+  estrela.className = `btn-favoritar-parada${ehParadaFavorita(parada.num) ? " favoritado" : ""}`;
+  estrela.dataset.num = String(parada.num);
+  estrela.setAttribute("aria-label", ehParadaFavorita(parada.num) ? "Remover parada dos favoritos" : "Favoritar parada");
+  estrela.setAttribute("aria-pressed", String(ehParadaFavorita(parada.num)));
+  estrela.innerHTML = SVG_ESTRELA;
+  estrela.addEventListener("click", () => alternarParadaFavorita(parada.num));
+  acoes.appendChild(estrela);
+  card.append(info, acoes);
+  return card;
+}
+
+function obterLocalizacaoUsuario() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Este aparelho não oferece serviço de localização."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (posicao) => {
+        ultimaLocalizacao = {
+          lat: posicao.coords.latitude,
+          lng: posicao.coords.longitude,
+          accuracy: posicao.coords.accuracy,
+        };
+        resolve(ultimaLocalizacao);
+      },
+      (erro) => {
+        const mensagens = {
+          1: "Permissão de localização negada. Autorize o acesso nas configurações do navegador.",
+          2: "Não foi possível determinar sua localização. Verifique o sinal e tente novamente.",
+          3: "A localização demorou mais que 10 segundos. Tente novamente.",
+        };
+        reject(new Error(mensagens[erro.code] || "Não foi possível obter sua localização."));
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+}
+
+async function carregarParadasProximas(localizacao, raio = 500) {
+  const container = document.getElementById("lista-paradas-proximas");
+  container.replaceChildren();
+  const carregando = document.createElement("p");
+  carregando.className = "mensagem-vazia";
+  carregando.textContent = "Buscando paradas próximas...";
+  container.appendChild(carregando);
+  try {
+    const consulta = new URLSearchParams({
+      lat: String(localizacao.lat),
+      lng: String(localizacao.lng),
+      raio: String(raio),
+    });
+    const resultado = await buscarParadasNaApi(`/proximas?${consulta}`);
+    container.replaceChildren();
+    if (!resultado.paradas?.length) {
+      const aviso = document.createElement("p");
+      aviso.className = "mensagem-vazia";
+      aviso.textContent = raio < 2000
+        ? `Nenhuma parada encontrada em ${formatarDistancia(raio)}.`
+        : "Nenhuma parada encontrada em até 2 km da sua localização.";
+      container.appendChild(aviso);
+      if (raio < 2000) {
+        const botao = document.createElement("button");
+        botao.type = "button";
+        botao.className = "botao-secundario";
+        botao.textContent = `Aumentar raio para ${raio === 500 ? "1 km" : "2 km"}`;
+        botao.addEventListener("click", () =>
+          carregarParadasProximas(localizacao, raio === 500 ? 1000 : 2000)
+        );
+        container.appendChild(botao);
+      }
+      return;
+    }
+    resultado.paradas.slice(0, 10).forEach((parada) =>
+      container.appendChild(criarCardParada(parada, {
+        distanciaM: parada.distanciaM,
+        mostrarMapa: true,
+      }))
+    );
+  } catch (erro) {
+    console.error(erro);
+    container.replaceChildren();
+    const aviso = document.createElement("p");
+    aviso.className = "mensagem-vazia";
+    aviso.textContent = `Não foi possível carregar as paradas próximas. ${erro.message}`;
+    container.appendChild(aviso);
+  }
+}
+
+async function usarLocalizacaoParaParadas() {
+  const container = document.getElementById("lista-paradas-proximas");
+  container.replaceChildren();
+  const aviso = document.createElement("p");
+  aviso.className = "mensagem-vazia";
+  aviso.textContent = "Obtendo sua localização...";
+  container.appendChild(aviso);
+  try {
+    const localizacao = await obterLocalizacaoUsuario();
+    await carregarParadasProximas(localizacao);
+  } catch (erro) {
+    console.warn("Localização indisponível:", erro);
+    aviso.textContent = erro.message;
+  }
+}
+
+function mostrarLocalizacaoNoMapa(localizacao) {
+  if (!mapa) iniciarMapa();
+  if (circuloPrecisaoUsuario) mapa.removeLayer(circuloPrecisaoUsuario);
+  if (marcadorUsuario) mapa.removeLayer(marcadorUsuario);
+  circuloPrecisaoUsuario = L.circle([localizacao.lat, localizacao.lng], {
+    radius: localizacao.accuracy,
+    color: "#2878D0",
+    fillColor: "#2878D0",
+    fillOpacity: 0.12,
+    weight: 1,
+  }).addTo(mapa);
+  marcadorUsuario = L.circleMarker([localizacao.lat, localizacao.lng], {
+    radius: 7,
+    color: "#FFFFFF",
+    weight: 2,
+    fillColor: "#2878D0",
+    fillOpacity: 1,
+  }).bindPopup("Você está aqui").addTo(mapa);
+  mapa.setView([localizacao.lat, localizacao.lng], 16);
+  marcadorUsuario.openPopup();
+}
+
+async function centralizarNaMinhaLocalizacao() {
+  const status = document.getElementById("mapa-status");
+  status.textContent = "Obtendo sua localização...";
+  try {
+    const localizacao = await obterLocalizacaoUsuario();
+    mostrarLocalizacaoNoMapa(localizacao);
+    status.textContent = "";
+  } catch (erro) {
+    console.warn("Localização indisponível:", erro);
+    status.textContent = erro.message;
+  }
+}
+
+function abrirParadaNoMapa(parada) {
+  irParaTela("tela-mapa");
+  setTimeout(() => {
+    if (!mapa) return;
+    const conteudo = document.createElement("strong");
+    conteudo.textContent = String(parada.nome || "Parada");
+    if (marcadorParadaSelecionada) mapa.removeLayer(marcadorParadaSelecionada);
+    marcadorParadaSelecionada = L.circleMarker([parada.lat, parada.lng], {
+      radius: 8,
+      color: "#FFFFFF",
+      weight: 2,
+      fillColor: "#D6B52E",
+      fillOpacity: 1,
+    }).addTo(mapa);
+    marcadorParadaSelecionada.bindPopup(conteudo).openPopup();
+    mapa.setView([parada.lat, parada.lng], 17);
+    document.getElementById("mapa-status").textContent = `Parada ${parada.num}`;
+  }, 180);
+}
+
+async function buscarParadasFavoritas() {
+  const favoritos = obterParadasFavoritas();
+  return Promise.all(favoritos.map(async (num) => {
+    try {
+      return await buscarParadasNaApi(`/${encodeURIComponent(num)}`);
+    } catch (erro) {
+      console.error(`Não foi possível carregar a parada favorita ${num}:`, erro);
+      return { num, nome: "Parada indisponível", tipo: "", linhas: [] };
+    }
+  }));
+}
+
+async function renderizarFavoritasParadas(idContainer, idMensagem) {
+  const container = document.getElementById(idContainer);
+  const mensagem = document.getElementById(idMensagem);
+  if (!container || !mensagem) return;
+  const favoritos = obterParadasFavoritas();
+  container.replaceChildren();
+  mensagem.classList.toggle("oculto", favoritos.length > 0);
+  if (!favoritos.length) return;
+  const paradas = await buscarParadasFavoritas();
+  if (obterParadasFavoritas().join("|") !== favoritos.join("|")) return;
+  paradas.forEach((parada) => container.appendChild(criarCardParada(parada)));
+  // TODO: estimar horários exige correlacionar NUM da parada com os pontos de horários da linha.
+}
+
+function configurarBuscaParadas() {
+  const entrada = document.getElementById("input-busca-paradas");
+  const resultados = document.getElementById("resultados-busca-paradas");
+  entrada.addEventListener("input", () => {
+    clearTimeout(debounceBuscaParadas);
+    const requisicaoAtual = ++requisicaoBuscaParadas;
+    const consulta = entrada.value.trim();
+    resultados.replaceChildren();
+    if (consulta.length < 2) return;
+    debounceBuscaParadas = setTimeout(async () => {
+      try {
+        const resposta = await buscarParadasNaApi(`/busca?q=${encodeURIComponent(consulta)}`);
+        if (requisicaoAtual !== requisicaoBuscaParadas) return;
+        resultados.replaceChildren();
+        if (!resposta.paradas?.length) {
+          const vazio = document.createElement("p");
+          vazio.className = "mensagem-vazia";
+          vazio.textContent = "Nenhuma parada encontrada.";
+          resultados.appendChild(vazio);
+        } else {
+          resposta.paradas.forEach((parada) => resultados.appendChild(criarCardParada(parada)));
+        }
+      } catch (erro) {
+        if (requisicaoAtual !== requisicaoBuscaParadas) return;
+        console.error(erro);
+        const aviso = document.createElement("p");
+        aviso.className = "mensagem-vazia";
+        aviso.textContent = `Não foi possível buscar paradas. ${erro.message}`;
+        resultados.replaceChildren(aviso);
+      }
+    }, 300);
+  });
+}
+
+function selecionarAbaBusca(aba) {
+  const linhasAtivas = aba === "linhas";
+  document.getElementById("aba-linhas").classList.toggle("ativa", linhasAtivas);
+  document.getElementById("aba-paradas").classList.toggle("ativa", !linhasAtivas);
+  document.getElementById("aba-linhas").setAttribute("aria-selected", String(linhasAtivas));
+  document.getElementById("aba-paradas").setAttribute("aria-selected", String(!linhasAtivas));
+  document.getElementById("busca-linhas-container").classList.toggle("oculto", !linhasAtivas);
+  document.getElementById("busca-paradas").classList.toggle("oculto", linhasAtivas);
+  document.getElementById("secao-linhas-favoritas").classList.toggle("oculto", !linhasAtivas);
+  document.getElementById("secao-resultados-linhas").classList.toggle("oculto", !linhasAtivas);
 }
 
 /* ---------- FUNÇÕES AUXILIARES ---------- */
@@ -480,11 +941,11 @@ function renderizarListaLinhas() {
   const msgVazio = document.getElementById("msg-sem-resultado");
   container.innerHTML = "";
 
-  if (LINHAS.length === 0) {
+  if (LINHAS_EXIBIDAS.length === 0) {
     msgVazio.classList.remove("oculto");
   } else {
     msgVazio.classList.add("oculto");
-    LINHAS.forEach((linha) => container.appendChild(criarCardLinha(linha)));
+    LINHAS_EXIBIDAS.forEach((linha) => container.appendChild(criarCardLinha(linha)));
   }
 }
 
@@ -496,15 +957,20 @@ function renderizarFavoritas() {
   container.innerHTML = "";
 
   if (favoritos.length === 0) {
+    msgSemFavoritas.textContent =
+      "Você ainda não tem linhas favoritas. Toque na estrela de uma linha para adicionar.";
     container.appendChild(msgSemFavoritas);
     msgSemFavoritas.classList.remove("oculto");
     return;
   }
 
-  favoritos.forEach((id) => {
-    const linha = obterLinhaPorId(id);
-    if (linha) container.appendChild(criarCardLinha(linha));
-  });
+  const linhas = favoritos.map(obterLinhaPorId).filter(Boolean);
+  linhas.forEach((linha) => container.appendChild(criarCardLinha(linha)));
+  if (linhas.length < favoritos.length) {
+    msgSemFavoritas.textContent = "Não foi possível carregar uma ou mais linhas favoritas.";
+    container.appendChild(msgSemFavoritas);
+    msgSemFavoritas.classList.remove("oculto");
+  }
 }
 
 function renderizarTelaFavoritos() {
@@ -515,35 +981,76 @@ function renderizarTelaFavoritos() {
   container.innerHTML = "";
 
   if (favoritos.length === 0) {
+    msgVazio.textContent =
+      "Você ainda não favoritou nenhuma linha. Vá até Início e toque na estrela de uma linha para adicioná-la aqui.";
     msgVazio.classList.remove("oculto");
     return;
   }
 
-  msgVazio.classList.add("oculto");
-  favoritos.forEach((id) => {
-    const linha = obterLinhaPorId(id);
-    if (linha) container.appendChild(criarCardLinha(linha));
-  });
+  const linhas = favoritos.map(obterLinhaPorId).filter(Boolean);
+  linhas.forEach((linha) => container.appendChild(criarCardLinha(linha)));
+  if (linhas.length === 0) {
+    msgVazio.textContent = "Não foi possível carregar suas linhas favoritas.";
+    msgVazio.classList.remove("oculto");
+  } else if (linhas.length < favoritos.length) {
+    const aviso = document.createElement("p");
+    aviso.className = "mensagem-vazia";
+    aviso.textContent = "Não foi possível carregar uma ou mais linhas favoritas.";
+    container.appendChild(aviso);
+    msgVazio.classList.add("oculto");
+  } else {
+    msgVazio.classList.add("oculto");
+  }
 }
 
 async function renderizarTudo() {
   const termo = document.getElementById("input-busca").value;
+  let erroBusca = null;
   try {
-    LINHAS = await buscarLinhasNaApi(termo);
+    if (!LINHAS_CARREGADAS) {
+      LINHAS = await buscarLinhasNaApi();
+      LINHAS_CARREGADAS = true;
+    }
+    LINHAS_EXIBIDAS = termo ? await buscarLinhasNaApi(termo) : LINHAS;
   } catch (erro) {
     console.error(erro);
-    LINHAS = [];
+    if (!LINHAS_CARREGADAS) LINHAS = [];
+    LINHAS_EXIBIDAS = [];
+    erroBusca = erro;
   }
   renderizarListaLinhas();
+  if (erroBusca) {
+    document.getElementById("msg-sem-resultado").textContent =
+      `Não foi possível carregar as linhas. ${erroBusca.message}`;
+  } else {
+    document.getElementById("msg-sem-resultado").textContent =
+      "Nenhuma linha encontrada para essa busca.";
+  }
   renderizarFavoritas();
   renderizarTelaFavoritos();
+  renderizarFavoritasParadas("lista-paradas-favoritas-inicio", "msg-paradas-favoritas-inicio");
+  renderizarFavoritasParadas("lista-paradas-favoritas-tela", "msg-paradas-favoritas-tela");
 }
 
 /* ---------- MODAL DE DETALHES DA LINHA ---------- */
 
 async function abrirModalLinha(idLinha) {
-  const linha = obterLinhaPorId(idLinha);
-  if (!linha) return;
+  let linha = obterLinhaPorId(idLinha);
+  if (!linha) {
+    try {
+      const linhas = await buscarLinhasNaApi(String(idLinha));
+      linha = linhas.find((item) => String(item.id) === String(idLinha));
+      if (linha) LINHAS.push(linha);
+    } catch (erro) {
+      console.error(erro);
+      mostrarErroApi(`Não foi possível carregar os detalhes da linha. ${erro.message}`);
+      return;
+    }
+  }
+  if (!linha) {
+    mostrarErroApi("Linha não encontrada.");
+    return;
+  }
 
   linhaSelecionadaId = idLinha;
   tipoDiaSelecionado = "util";
@@ -585,6 +1092,7 @@ async function carregarPontosERenderizar() {
   const container = document.getElementById("lista-horarios-modal");
   container.innerHTML = `<p class="mensagem-vazia">Carregando horários...</p>`;
 
+  let erroCarregamento = null;
   try {
     const resultado = await buscarHorariosNaApi(
       linhaSelecionadaId,
@@ -594,11 +1102,17 @@ async function carregarPontosERenderizar() {
   } catch (erro) {
     console.error(erro);
     pontosLinhaAtual = [];
+    erroCarregamento = erro;
   }
 
   if (pontosLinhaAtual.length === 0) {
     document.getElementById("seletor-ponto-wrapper").classList.add("oculto");
-    container.innerHTML = `<p class="mensagem-vazia">Esta linha não opera nesse tipo de dia.</p>`;
+    const aviso = document.createElement("p");
+    aviso.className = "mensagem-vazia";
+    aviso.textContent = erroCarregamento
+      ? `Não foi possível carregar os horários. ${erroCarregamento.message}`
+      : "Esta linha não opera nesse tipo de dia.";
+    container.replaceChildren(aviso);
     return;
   }
 
@@ -699,10 +1213,46 @@ function irParaTela(idTela) {
   if (idTela === "tela-mapa") iniciarMapa();
 }
 
+function aplicarTema(tema) {
+  const escuro = tema === "escuro";
+  document.documentElement.dataset.tema = escuro ? "escuro" : "claro";
+  document.getElementById("meta-theme-color").setAttribute("content", escuro ? "#08251B" : "#12372A");
+  const botao = document.getElementById("btn-tema");
+  botao.setAttribute("aria-label", escuro ? "Ativar tema claro" : "Ativar tema escuro");
+  botao.innerHTML = escuro
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.5A8.5 8.5 0 0 1 8.5 3.5 8.5 8.5 0 1 0 20.5 15.5Z"/></svg>';
+}
+
+function atualizarEstadoConexao() {
+  const offline = !navigator.onLine;
+  document.getElementById("aviso-offline").classList.toggle("oculto", !offline);
+}
+
 /* ---------- EVENTOS ---------- */
 
 document.addEventListener("DOMContentLoaded", () => {
+  aplicarTema(document.documentElement.dataset.tema || "claro");
   renderizarTudo();
+  configurarBuscaParadas();
+  atualizarEstadoConexao();
+  window.addEventListener("online", atualizarEstadoConexao);
+  window.addEventListener("offline", atualizarEstadoConexao);
+
+  document.getElementById("btn-tema").addEventListener("click", () => {
+    const proximoTema = document.documentElement.dataset.tema === "escuro" ? "claro" : "escuro";
+    try {
+      localStorage.setItem("buscwb_tema", proximoTema);
+    } catch (erro) {
+      console.error("Não foi possível salvar a preferência de tema:", erro);
+    }
+    aplicarTema(proximoTema);
+  });
+
+  document.getElementById("aba-linhas").addEventListener("click", () => selecionarAbaBusca("linhas"));
+  document.getElementById("aba-paradas").addEventListener("click", () => selecionarAbaBusca("paradas"));
+  document.getElementById("btn-localizacao").addEventListener("click", usarLocalizacaoParaParadas);
+  document.getElementById("btn-localizacao-mapa").addEventListener("click", centralizarNaMinhaLocalizacao);
 
   const inputBusca = document.getElementById("input-busca");
   let debounceBusca = null;
@@ -755,12 +1305,14 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   const botaoInstalar = document.getElementById("btn-instalar-app");
+  const dicaIOS = document.getElementById("dica-ios");
   const ehIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   let promptInstalacao = null;
 
   if (ehIOS && !navigator.standalone) {
-    botaoInstalar.classList.remove("oculto");
+    dicaIOS.classList.remove("oculto");
+    botaoInstalar.classList.add("oculto");
   }
 
   window.addEventListener("beforeinstallprompt", (evento) => {
@@ -784,6 +1336,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("appinstalled", () => {
     promptInstalacao = null;
     botaoInstalar.classList.add("oculto");
+    dicaIOS.classList.add("oculto");
   });
 
   if ("serviceWorker" in navigator) {

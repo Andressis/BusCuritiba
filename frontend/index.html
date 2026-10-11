@@ -10,18 +10,34 @@
   <link rel="icon" href="/favicon.ico?v=1.0.3" type="image/x-icon">
 
   <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#12372A" />
+  <meta name="theme-color" content="#12372A" id="meta-theme-color" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Bus Cwb" />
+  <script>
+    (() => {
+      try {
+        const salvo = localStorage.getItem("buscwb_tema");
+        const tema = salvo === "claro" || salvo === "escuro"
+          ? salvo
+          : (matchMedia("(prefers-color-scheme: dark)").matches ? "escuro" : "claro");
+        document.documentElement.dataset.tema = tema;
+        document.getElementById("meta-theme-color")?.setAttribute("content", tema === "escuro" ? "#08251B" : "#12372A");
+      } catch (erro) {
+        const tema = matchMedia("(prefers-color-scheme: dark)").matches ? "escuro" : "claro";
+        document.documentElement.dataset.tema = tema;
+        document.getElementById("meta-theme-color").setAttribute("content", tema === "escuro" ? "#08251B" : "#12372A");
+      }
+    })();
+  </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+  <link rel="stylesheet" href="vendor/leaflet.css" />
+  <script src="vendor/leaflet.js" defer></script>
   <link rel="stylesheet" href="style.css?v=1.0.5" />
 </head>
 
@@ -51,14 +67,25 @@
       <button id="btn-instalar-app" class="btn-instalar-app oculto" type="button" aria-label="Instalar Bus Cwb">
         Instalar
       </button>
+      <button id="btn-tema" class="btn-tema" type="button" aria-label="Ativar tema escuro">
+        <svg id="icone-tema" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+        </svg>
+      </button>
     </div>
   </header>
+
+  <div id="aviso-offline" class="aviso-offline oculto" role="status">Você está offline. Mostrando dados salvos.</div>
+  <div id="aviso-dados-salvos" class="aviso-dados-salvos oculto" role="status">Dados salvos</div>
+  <div id="aviso-erro" class="aviso-erro oculto" role="alert"></div>
+  <p id="dica-ios" class="dica-ios oculto">Toque em Compartilhar e depois em Adicionar à Tela de Início.</p>
 
   <main class="app-main">
 
     <section id="tela-inicio" class="tela ativa">
 
-      <div class="busca-container">
+      <div class="busca-container" id="busca-linhas-container">
         <input type="text" id="input-busca" placeholder="Digite o número ou nome da linha" autocomplete="off" />
         <button id="btn-buscar" aria-label="Pesquisar linha">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -68,7 +95,28 @@
         </button>
       </div>
 
+      <div class="abas-busca" role="tablist" aria-label="Tipo de busca">
+        <button id="aba-linhas" type="button" class="aba-busca ativa" role="tab" aria-selected="true">Linhas</button>
+        <button id="aba-paradas" type="button" class="aba-busca" role="tab" aria-selected="false">Paradas</button>
+      </div>
+      <div id="busca-paradas" class="busca-paradas oculto">
+        <input id="input-busca-paradas" type="search" placeholder="Digite o nome ou número da parada" autocomplete="off" />
+        <div id="resultados-busca-paradas" class="lista-paradas" aria-live="polite"></div>
+      </div>
+
       <section class="secao">
+        <div class="secao-titulo"><h2>Paradas perto de mim</h2></div>
+        <button id="btn-localizacao" class="botao-secundario" type="button">Usar minha localização</button>
+        <div id="lista-paradas-proximas" class="lista-paradas" aria-live="polite"></div>
+      </section>
+
+      <section class="secao">
+        <div class="secao-titulo"><h2>Paradas favoritas</h2></div>
+        <div id="lista-paradas-favoritas-inicio" class="lista-paradas"></div>
+        <p id="msg-paradas-favoritas-inicio" class="mensagem-vazia">Toque na estrela de uma parada para adicioná-la aos favoritos.</p>
+      </section>
+
+      <section class="secao" id="secao-linhas-favoritas">
         <div class="secao-titulo">
           <h2>Linhas favoritas</h2>
         </div>
@@ -79,7 +127,7 @@
         </div>
       </section>
 
-      <section class="secao">
+      <section class="secao" id="secao-resultados-linhas">
         <div class="secao-titulo">
           <h2>Linhas e próximos horários</h2>
         </div>
@@ -98,10 +146,17 @@
           autocomplete="off" />
         <div id="mapa-sugestoes" class="sugestoes oculto"></div>
       </div>
-      <div id="mapa" class="mapa"></div>
+      <div class="mapa-wrapper">
+        <div id="mapa" class="mapa"></div>
+        <button id="btn-localizacao-mapa" class="btn-localizacao-mapa" type="button" aria-label="Mostrar minha localização">📍</button>
+      </div>
       <div id="mapa-legenda" class="mapa-legenda oculto">
-        <div><span class="leg-cor" style="background-color: #0ce64d"></span> Ida <small id="leg-ida"></small></div>
-        <div><span class="leg-cor" style="background-color: #f30707"></span> Volta <small id="leg-volta"></small></div>
+        <button id="btn-leg-ida" class="item-legenda" type="button" aria-pressed="true">
+          <span class="leg-cor cor-ida"></span> Ida <small id="leg-ida"></small>
+        </button>
+        <button id="btn-leg-volta" class="item-legenda" type="button" aria-pressed="true">
+          <span class="leg-cor cor-volta"></span> Volta <small id="leg-volta"></small>
+        </button>
       </div>
       <p class="mensagem-vazia" id="mapa-status" role="status" aria-live="polite">
         Digite o número ou o nome de uma linha para ver o trajeto.
@@ -118,6 +173,11 @@
         Você ainda não favoritou nenhuma linha. Vá até "Início" e toque
         na estrela de uma linha para adicioná-la aqui.
       </p>
+      <section class="secao">
+        <div class="secao-titulo"><h2>Minhas paradas favoritas</h2></div>
+        <div id="lista-paradas-favoritas-tela" class="lista-paradas"></div>
+        <p id="msg-paradas-favoritas-tela" class="mensagem-vazia">Você ainda não favoritou paradas. Use a estrela em uma parada para adicioná-la aqui.</p>
+      </section>
     </section>
 
   </main>

@@ -4,6 +4,7 @@ const { XzReadableStream } = require("xz-decompress");
 const router = express.Router();
 const TEMPO_CACHE = 6 * 60 * 60 * 1000;
 const cacheArquivos = new Map();
+let cacheIndiceParadas = null;
 
 function dataCuritiba(data = new Date()) {
   return new Intl.DateTimeFormat("sv-SE", {
@@ -92,6 +93,149 @@ async function obterAgrupados(nome) {
   cacheArquivos.set(nome, { dados: agrupados, expiraEm: Date.now() + TEMPO_CACHE });
   return agrupados;
 }
+
+async function obterIndiceParadas() {
+  if (cacheIndiceParadas && cacheIndiceParadas.expiraEm > Date.now()) {
+    return cacheIndiceParadas.dados;
+  }
+
+  const linhas = await obterAgrupados("pontosLinha");
+  const paradas = new Map();
+
+  linhas.forEach((pontos, cod) => {
+    pontos.forEach((ponto) => {
+      const num = String(ponto.NUM);
+      if (!paradas.has(num)) {
+        paradas.set(num, {
+          num,
+          nome: ponto.NOME,
+          tipo: ponto.TIPO,
+          lat: converterCoordenada(ponto.LAT),
+          lng: converterCoordenada(ponto.LON),
+          linhas: [],
+        });
+      }
+
+      const parada = paradas.get(num);
+      if (!parada.linhas.some((linha) => linha.cod === cod)) {
+        parada.linhas.push({ cod, sentido: ponto.SENTIDO });
+      }
+    });
+  });
+
+  cacheIndiceParadas = { dados: paradas, expiraEm: Date.now() + TEMPO_CACHE };
+  return paradas;
+}
+
+function normalizarTexto(texto) {
+  return String(texto)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+}
+
+function calcularDistanciaM(latA, lngA, latB, lngB) {
+  const radianos = (graus) => (graus * Math.PI) / 180;
+  const diferencaLat = radianos(latB - latA);
+  const diferencaLng = radianos(lngB - lngA);
+  const haversine =
+    Math.sin(diferencaLat / 2) ** 2 +
+    Math.cos(radianos(latA)) *
+      Math.cos(radianos(latB)) *
+      Math.sin(diferencaLng / 2) ** 2;
+  return 6371000 * 2 * Math.asin(Math.min(1, Math.sqrt(haversine)));
+}
+
+function formatarParada(parada) {
+  return {
+    num: parada.num,
+    nome: parada.nome,
+    tipo: parada.tipo,
+    lat: parada.lat,
+    lng: parada.lng,
+    linhas: parada.linhas,
+  };
+}
+
+router.get("/paradas/proximas", async (req, res) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    if (
+      req.query.lat === undefined ||
+      req.query.lat === "" ||
+      req.query.lng === undefined ||
+      req.query.lng === "" ||
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      Math.abs(lat) > 90 ||
+      Math.abs(lng) > 180
+    ) {
+      return res.status(400).json({ erro: "Informe latitude e longitude numéricas válidas." });
+    }
+
+    const raioInformado = req.query.raio === undefined ? 500 : Number(req.query.raio);
+    if (!Number.isFinite(raioInformado) || raioInformado <= 0) {
+      return res.status(400).json({ erro: "O raio deve ser um número maior que zero." });
+    }
+    const raio = Math.min(raioInformado, 2000);
+    const indice = await obterIndiceParadas();
+    const paradas = Array.from(indice.values())
+      .map((parada) => ({
+        parada: formatarParada(parada),
+        distancia: calcularDistanciaM(lat, lng, parada.lat, parada.lng),
+      }))
+      .filter((item) => Number.isFinite(item.distancia) && item.distancia <= raio)
+      .sort((a, b) => a.distancia - b.distancia)
+      .slice(0, 30);
+
+    res.json({
+      paradas: paradas.map(({ parada, distancia }) => ({
+        ...parada,
+        distanciaM: Math.round(distancia),
+      })),
+    });
+  } catch (erro) {
+    console.error("Erro ao buscar paradas próximas:", erro);
+    res.status(500).json({ erro: `Não foi possível buscar paradas próximas: ${erro.message}` });
+  }
+});
+
+router.get("/paradas/busca", async (req, res) => {
+  try {
+    const consulta = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (consulta.length < 2) {
+      return res.status(400).json({ erro: "Informe pelo menos 2 caracteres para buscar paradas." });
+    }
+
+    const termoNormalizado = normalizarTexto(consulta);
+    const indice = await obterIndiceParadas();
+    const paradas = Array.from(indice.values())
+      .filter((parada) =>
+        normalizarTexto(parada.nome).includes(termoNormalizado) ||
+        parada.num.includes(consulta)
+      )
+      .slice(0, 20)
+      .map(formatarParada);
+
+    res.json({ paradas });
+  } catch (erro) {
+    console.error("Erro ao buscar paradas:", erro);
+    res.status(500).json({ erro: `Não foi possível buscar paradas: ${erro.message}` });
+  }
+});
+
+router.get("/paradas/:num", async (req, res) => {
+  try {
+    const indice = await obterIndiceParadas();
+    const parada = indice.get(String(req.params.num));
+    if (!parada) return res.status(404).json({ erro: "Parada não encontrada." });
+    res.json(formatarParada(parada));
+  } catch (erro) {
+    console.error("Erro ao carregar parada:", erro);
+    res.status(500).json({ erro: `Não foi possível carregar a parada: ${erro.message}` });
+  }
+});
 
 router.get("/linhas/:id/shape", async (req, res) => {
   try {
