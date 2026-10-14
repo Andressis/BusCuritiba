@@ -339,6 +339,22 @@ svg {
   cursor: pointer;
 }
 
+.botao-secundario.localizacao-permitida {
+  border-color: var(--verde);
+  color: var(--verde);
+}
+
+.status-localizacao {
+  min-height: 18px;
+  margin-top: 6px;
+  color: var(--texto-secundario);
+  font-size: 12px;
+}
+
+.aviso-localizacao-aproximada {
+  margin-bottom: 10px;
+}
+
 .btn-ver-mapa {
   margin-top: 8px;
   background: var(--verde);
@@ -784,6 +800,8 @@ svg {
 }
 
 .modal-linha {
+  display: flex;
+  flex-direction: column;
   background: var(--superficie);
   width: 100%;
   max-width: 480px;
@@ -791,7 +809,7 @@ svg {
   padding: 22px 20px calc(22px + env(safe-area-inset-bottom));
   position: relative;
   max-height: 88vh;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .btn-fechar {
@@ -823,6 +841,7 @@ svg {
   margin-bottom: 16px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--borda);
+  flex: 0 0 auto;
 }
 
 .modal-header-numero {
@@ -866,9 +885,19 @@ svg {
   margin-bottom: 20px;
 }
 
+.modal-linha > .btn-favoritar {
+  flex: 0 0 auto;
+  margin-bottom: 10px;
+}
+
 .btn-favoritar svg {
   width: 15px;
   height: 15px;
+}
+
+.btn-favoritar:focus-visible {
+  outline: 3px solid var(--verde);
+  outline-offset: 2px;
 }
 
 .btn-favoritar.favoritado {
@@ -883,6 +912,22 @@ svg {
 
 .modal-tipo-dia, .modal-horarios {
   margin-bottom: 20px;
+}
+
+.modal-tipo-dia,
+.modal-ponto {
+  flex: 0 0 auto;
+}
+
+.modal-horarios {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.modal-horarios > .rotulo {
+  flex: 0 0 auto;
 }
 
 .rotulo {
@@ -924,9 +969,13 @@ svg {
 }
 
 .horarios-lista {
+  flex: 1 1 auto;
+  min-height: 160px;
   border: 1px solid var(--borda);
   border-radius: var(--radius);
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .horario-item {

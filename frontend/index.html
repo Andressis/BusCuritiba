@@ -107,7 +107,8 @@
 
         <section class="secao">
           <div class="secao-titulo"><h2>Paradas perto de mim</h2></div>
-          <button id="btn-localizacao" class="botao-secundario" type="button">Usar minha localização</button>
+          <button id="btn-localizacao" class="botao-secundario" type="button">Ativar localização</button>
+          <p id="localizacao-status" class="status-localizacao" role="status" aria-live="polite"></p>
           <div id="lista-paradas-proximas" class="lista-paradas" aria-live="polite"></div>
         </section>
 
@@ -207,6 +208,15 @@
             stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
         </svg>
         <span id="texto-favoritar-modal">Favoritar linha</span>
+      </button>
+
+      <button id="btn-ver-itinerario" class="btn-favoritar" type="button"
+        aria-label="Ver itinerário da linha nos sentidos de ida e volta">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M9 18l-6 3V6l6-3m0 15l6 3m-6-3V3m6 18l6-3V3l-6 3m0 15V6m0 0L9 3"
+            stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>Ver itinerário (ida e volta)</span>
       </button>
 
       <div class="modal-tipo-dia">

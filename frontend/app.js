@@ -13,7 +13,6 @@ let grupoIda = null;
 let grupoVolta = null;
 let marcadorUsuario = null;
 let marcadorParadaSelecionada = null;
-let ultimaLocalizacao = null;
 let requisicaoMapa = 0;
 let debounceBuscaMapa = null;
 let requisicaoBuscaMapa = 0;
@@ -21,6 +20,193 @@ let debounceBuscaParadas = null;
 let requisicaoBuscaParadas = 0;
 let temporizadorAvisoCache = null;
 let temporizadorAvisoErro = null;
+
+/* ---------- LOCALIZAÇÃO (compartilhada) ---------- */
+let ultimaPosicao = null;
+let idWatch = null;
+let localizacaoAtivadaPeloUsuario = false;
+let localizacaoNegada = false;
+const ouvintesLocalizacao = new Set();
+const rejeicoesLocalizacao = new Set();
+
+function mensagemErroLocalizacao(codigo) {
+  const mensagens = {
+    1: "Permissão de localização negada. Para liberar, toque no ícone de cadeado ao lado do endereço, abra Localização e escolha Permitir.",
+    2: "Não foi possível determinar sua localização. Verifique o sinal e tente novamente.",
+    3: "A localização demorou mais que 20 segundos. Tente novamente.",
+  };
+  return mensagens[codigo] || "Não foi possível obter sua localização.";
+}
+
+function ativarLocalizacao() {
+  if (idWatch !== null) return;
+  if (!window.isSecureContext) {
+    throw new Error("A localização só funciona em HTTPS.");
+  }
+  if (!navigator.geolocation) {
+    throw new Error("Este aparelho não oferece serviço de localização.");
+  }
+
+  localizacaoNegada = false;
+  localizacaoAtivadaPeloUsuario = true;
+  idWatch = navigator.geolocation.watchPosition(
+    (posicao) => {
+      const leitura = {
+        lat: posicao.coords.latitude,
+        lng: posicao.coords.longitude,
+        accuracy: posicao.coords.accuracy,
+        instante: Date.now(),
+      };
+      if (
+        !Number.isFinite(leitura.lat) ||
+        !Number.isFinite(leitura.lng) ||
+        !Number.isFinite(leitura.accuracy)
+      ) {
+        const erro = new Error("O aparelho retornou coordenadas de localização inválidas.");
+        rejeicoesLocalizacao.forEach((rejeitar) => rejeitar(erro));
+        return;
+      }
+
+      if (
+        !ultimaPosicao ||
+        Date.now() - ultimaPosicao.instante >= 60000 ||
+        leitura.accuracy <= ultimaPosicao.accuracy
+      ) {
+        ultimaPosicao = leitura;
+      }
+      ouvintesLocalizacao.forEach((ouvinte) => ouvinte(ultimaPosicao));
+    },
+    (erro) => {
+      const falha = new Error(mensagemErroLocalizacao(erro.code));
+      rejeicoesLocalizacao.forEach((rejeitar) => rejeitar(falha));
+      if (erro.code === 1) {
+        if (idWatch !== null) navigator.geolocation.clearWatch(idWatch);
+        idWatch = null;
+        localizacaoNegada = true;
+        atualizarInterfaceLocalizacao("denied");
+      }
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+  );
+}
+
+function obterPosicao() {
+  if (ultimaPosicao && Date.now() - ultimaPosicao.instante < 60000) {
+    return Promise.resolve(ultimaPosicao);
+  }
+  return new Promise((resolve, reject) => {
+    let temporizador;
+    const receberPosicao = (posicao) => {
+      clearTimeout(temporizador);
+      ouvintesLocalizacao.delete(receberPosicao);
+      rejeicoesLocalizacao.delete(rejeitar);
+      resolve(posicao);
+    };
+    const rejeitar = (erro) => {
+      clearTimeout(temporizador);
+      ouvintesLocalizacao.delete(receberPosicao);
+      rejeicoesLocalizacao.delete(rejeitar);
+      reject(erro);
+    };
+    ouvintesLocalizacao.add(receberPosicao);
+    rejeicoesLocalizacao.add(rejeitar);
+    temporizador = setTimeout(
+      () => rejeitar(new Error("A localização demorou mais que 20 segundos. Tente novamente.")),
+      25000
+    );
+    try {
+      ativarLocalizacao();
+    } catch (erro) {
+      rejeitar(erro);
+    }
+  });
+}
+
+function aoMudarLocalizacao(fn) {
+  ouvintesLocalizacao.add(fn);
+  return () => ouvintesLocalizacao.delete(fn);
+}
+
+function pararLocalizacao() {
+  if (idWatch !== null && navigator.geolocation) {
+    navigator.geolocation.clearWatch(idWatch);
+  }
+  idWatch = null;
+  ultimaPosicao = null;
+  rejeicoesLocalizacao.forEach((rejeitar) =>
+    rejeitar(new Error("A localização foi pausada. Toque para tentar novamente."))
+  );
+}
+
+async function estadoPermissao() {
+  try {
+    if (!navigator.permissions?.query) return "desconhecido";
+    const permissao = await navigator.permissions.query({ name: "geolocation" });
+    return ["granted", "denied", "prompt"].includes(permissao.state)
+      ? permissao.state
+      : "desconhecido";
+  } catch (erro) {
+    console.warn("Não foi possível consultar a permissão de localização:", erro);
+    return "desconhecido";
+  }
+}
+
+function atualizarInterfaceLocalizacao(permissao = null) {
+  const botao = document.getElementById("btn-localizacao");
+  const botaoMapa = document.getElementById("btn-localizacao-mapa");
+  const aviso = document.getElementById("localizacao-status");
+  if (!botao || !aviso) return;
+  if (!window.isSecureContext) {
+    botao.classList.add("oculto");
+    botaoMapa?.classList.add("oculto");
+    aviso.textContent = "A localização só funciona em HTTPS.";
+    const statusMapa = document.getElementById("mapa-status");
+    if (statusMapa) statusMapa.textContent = "A localização só funciona em HTTPS.";
+    return;
+  }
+  botao.classList.remove("oculto");
+  botaoMapa?.classList.remove("oculto");
+  if (permissao === "denied") {
+    localizacaoNegada = true;
+    aviso.textContent = mensagemErroLocalizacao(1);
+    botao.textContent = "Ativar localização";
+    botao.classList.remove("localizacao-permitida");
+    return;
+  }
+  if (ultimaPosicao && idWatch !== null) {
+    aviso.textContent = `Localização ativa (±${formatarDistancia(Math.round(ultimaPosicao.accuracy))})`;
+    botao.textContent = "Atualizar paradas próximas";
+    botao.classList.add("localizacao-permitida");
+    return;
+  }
+  botao.textContent = "Ativar localização";
+  botao.classList.toggle("localizacao-permitida", permissao === "granted");
+  aviso.textContent = permissao === "granted"
+    ? "Permissão concedida. Toque para usar sua localização."
+    : "";
+}
+
+aoMudarLocalizacao(() => atualizarInterfaceLocalizacao());
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    const deveRetomar = localizacaoAtivadaPeloUsuario;
+    pararLocalizacao();
+    if (deveRetomar) {
+      const aviso = document.getElementById("localizacao-status");
+      if (aviso) aviso.textContent = "Localização pausada enquanto o app está em segundo plano.";
+    }
+    return;
+  }
+  if (localizacaoAtivadaPeloUsuario && !localizacaoNegada) {
+    try {
+      ativarLocalizacao();
+    } catch (erro) {
+      atualizarInterfaceLocalizacao();
+      console.warn("Não foi possível retomar a localização:", erro);
+    }
+  }
+});
 
 /* ---------- FAVORITOS (localStorage) ---------- */
 const CHAVE_FAVORITOS = "buscwb_favoritos";
@@ -731,45 +917,22 @@ function criarCardParada(parada, { distanciaM, mostrarMapa = false } = {}) {
   return card;
 }
 
-function obterLocalizacaoUsuario() {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error("Este aparelho não oferece serviço de localização."));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (posicao) => {
-        ultimaLocalizacao = {
-          lat: posicao.coords.latitude,
-          lng: posicao.coords.longitude,
-          accuracy: posicao.coords.accuracy,
-        };
-        if (
-          !Number.isFinite(ultimaLocalizacao.lat) ||
-          !Number.isFinite(ultimaLocalizacao.lng) ||
-          !Number.isFinite(ultimaLocalizacao.accuracy)
-        ) {
-          reject(new Error("O aparelho retornou coordenadas de localização inválidas."));
-          return;
-        }
-        resolve(ultimaLocalizacao);
-      },
-      (erro) => {
-        const mensagens = {
-          1: "Permissão de localização negada. Autorize o acesso nas configurações do navegador.",
-          2: "Não foi possível determinar sua localização. Verifique o sinal e tente novamente.",
-          3: "A localização demorou mais que 10 segundos. Tente novamente.",
-        };
-        reject(new Error(mensagens[erro.code] || "Não foi possível obter sua localização."));
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-    );
-  });
-}
-
 async function carregarParadasProximas(localizacao, raio = 500) {
   const container = document.getElementById("lista-paradas-proximas");
   container.replaceChildren();
+  if (localizacao.accuracy > 500) {
+    const aviso = document.createElement("p");
+    aviso.className = "mensagem-vazia";
+    aviso.textContent = `Não é possível listar paradas: a localização está muito imprecisa (±${formatarDistancia(Math.round(localizacao.accuracy))}). Ative o GPS/localização precisa do aparelho e tente novamente.`;
+    container.appendChild(aviso);
+    return;
+  }
+  if (localizacao.accuracy > 50) {
+    const avisoPrecisao = document.createElement("p");
+    avisoPrecisao.className = "parada-distancia aviso-localizacao-aproximada";
+    avisoPrecisao.textContent = `Localização aproximada (±${formatarDistancia(Math.round(localizacao.accuracy))}); as paradas podem não estar na ordem exata.`;
+    container.appendChild(avisoPrecisao);
+  }
   const carregando = document.createElement("p");
   carregando.className = "mensagem-vazia";
   carregando.textContent = "Buscando paradas próximas...";
@@ -781,17 +944,12 @@ async function carregarParadasProximas(localizacao, raio = 500) {
       raio: String(raio),
     });
     const resultado = await buscarParadasNaApi(`/proximas?${consulta}`);
-    container.replaceChildren();
-    const precisao = document.createElement("p");
-    precisao.className = "parada-distancia";
-    precisao.textContent = `Precisão aproximada da localização: ±${formatarDistancia(Math.round(localizacao.accuracy))}.`;
-    container.appendChild(precisao);
+    if (localizacao.accuracy <= 50) container.replaceChildren();
+    else container.querySelector(".mensagem-vazia")?.remove();
     if (!resultado.paradas?.length) {
       const aviso = document.createElement("p");
       aviso.className = "mensagem-vazia";
-      aviso.textContent = localizacao.accuracy > 100
-        ? `Nenhuma parada encontrada em ${formatarDistancia(raio)}. A localização recebida tem precisão limitada; ative a localização precisa/GPS do aparelho e tente novamente.`
-        : raio < 2000
+      aviso.textContent = raio < 2000
         ? `Nenhuma parada encontrada em ${formatarDistancia(raio)}.`
         : "Nenhuma parada encontrada em até 2 km da sua localização.";
       container.appendChild(aviso);
@@ -831,11 +989,15 @@ async function usarLocalizacaoParaParadas() {
   aviso.textContent = "Obtendo sua localização...";
   container.appendChild(aviso);
   try {
-    const localizacao = await obterLocalizacaoUsuario();
+    ativarLocalizacao();
+    const localizacao = await obterPosicao();
     await carregarParadasProximas(localizacao);
   } catch (erro) {
     console.warn("Localização indisponível:", erro);
     aviso.textContent = erro.message;
+    if (erro.message.includes("Permissão de localização negada")) {
+      atualizarInterfaceLocalizacao("denied");
+    }
   }
 }
 
@@ -857,12 +1019,16 @@ async function centralizarNaMinhaLocalizacao() {
   const status = document.getElementById("mapa-status");
   status.textContent = "Obtendo sua localização...";
   try {
-    const localizacao = await obterLocalizacaoUsuario();
+    ativarLocalizacao();
+    const localizacao = await obterPosicao();
     mostrarLocalizacaoNoMapa(localizacao);
     status.textContent = "";
   } catch (erro) {
     console.warn("Localização indisponível:", erro);
     status.textContent = erro.message;
+    if (erro.message.includes("Permissão de localização negada")) {
+      atualizarInterfaceLocalizacao("denied");
+    }
   }
 }
 
@@ -1359,6 +1525,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("aba-paradas").addEventListener("click", () => selecionarAbaBusca("paradas"));
   document.getElementById("btn-localizacao").addEventListener("click", usarLocalizacaoParaParadas);
   document.getElementById("btn-localizacao-mapa").addEventListener("click", centralizarNaMinhaLocalizacao);
+  if (!window.isSecureContext) {
+    atualizarInterfaceLocalizacao();
+  } else {
+    estadoPermissao().then((permissao) => atualizarInterfaceLocalizacao(permissao));
+  }
 
   const inputBusca = document.getElementById("input-busca");
   let debounceBusca = null;
@@ -1385,6 +1556,30 @@ document.addEventListener("DOMContentLoaded", () => {
     .addEventListener("click", () => {
       if (linhaSelecionadaId) alternarFavorito(linhaSelecionadaId);
       atualizarFavoritoModal();
+    });
+
+  document
+    .getElementById("btn-ver-itinerario")
+    .addEventListener("click", async () => {
+      const linha =
+        obterLinhaPorId(linhaSelecionadaId) ||
+        LINHAS.find((item) => String(item.id) === String(linhaSelecionadaId));
+      fecharModalLinha();
+      irParaTela("tela-mapa");
+
+      const status = document.getElementById("mapa-status");
+      if (!linha) {
+        status.textContent = "Linha não encontrada para exibir o itinerário.";
+        return;
+      }
+
+      if (!mapa) return;
+
+      clearTimeout(debounceBuscaMapa);
+      requisicaoBuscaMapa += 1;
+      document.getElementById("mapa-busca").value = `${linha.numero} - ${linha.nome}`;
+      document.getElementById("mapa-sugestoes").classList.add("oculto");
+      await selecionarLinhaMapa(linha.id, linha);
     });
 
   document.querySelectorAll(".tipo-dia-btn").forEach((botao) => {
