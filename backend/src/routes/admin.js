@@ -6,7 +6,7 @@ const router = express.Router();
 const LIMITE_TENTATIVAS = new Map();
 const STATUS_VALIDOS = ["pendente", "aprovada", "rejeitada", "encaminhada"];
 const DURACAO_TOKEN = 2 * 60 * 60 * 1000;
-const DURACAO_LIMITE = 15 * 60 * 1000;
+const DURACAO_LIMITE = 60 * 1000;
 
 function obterIpHash(ip) {
   return crypto
@@ -58,7 +58,7 @@ router.post("/login", (req, res) => {
   );
   if (tentativasAtuais.length >= 5) {
     LIMITE_TENTATIVAS.set(hashIp, tentativasAtuais);
-    return res.status(429).json({ mensagem: "Muitas tentativas. Tente novamente em 15 minutos." });
+    return res.status(429).json({ mensagem: "Muitas tentativas. Tente novamente em 1 minuto." });
   }
   const senha = typeof req.body.senha === "string" ? req.body.senha : "";
   if (!iguaisEmTempoConstante(senha, process.env.ADMIN_SENHA)) {
