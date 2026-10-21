@@ -9,7 +9,9 @@
     "dev": "node --watch src/server.js",
     "importar-horarios": "node src/scripts/importarHorariosUrbs.js",
     "migrar": "node src/scripts/migrar.js",
-    "importar-horarios-ufpr": "node src/scripts/importarHorariosUfpr.js"
+    "importar-horarios-ufpr": "node src/scripts/importarHorariosUfpr.js",
+    "importar-empresas": "node src/scripts/importarEmpresas.js",
+    "anonimizar-reclamacoes": "node src/scripts/anonimizarReclamacoes.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -1,4 +1,4 @@
-const CACHE_NOME = "bus-cwb-cache-v15";
+const CACHE_NOME = "bus-cwb-cache-v17";
 const CACHE_API = "bus-cwb-api-v1";
 const CACHE_TILES = "bus-cwb-tiles-v2";
 const ARQUIVOS_PARA_CACHE = [
@@ -108,6 +108,15 @@ self.addEventListener("fetch", (evento) => {
   if (requisicao.method !== "GET") return;
 
   const url = new URL(requisicao.url);
+  if (
+    url.pathname === "/admin.html" ||
+    url.pathname.endsWith("/admin.js") ||
+    url.pathname.startsWith("/api/reclamacoes") ||
+    url.pathname.startsWith("/api/config") ||
+    url.pathname.startsWith("/api/admin")
+  ) {
+    return;
+  }
   if (url.pathname.includes("/api/")) {
     evento.respondWith(responderApi(requisicao));
     return;

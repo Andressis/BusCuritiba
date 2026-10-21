@@ -34,8 +34,12 @@ backend/
     server.js                   -> servidor Express (rotas da API)
     db/schema.sql               -> criação das tabelas
     routes/linhas.js             -> endpoints /api/linhas
+    routes/reclamacoes.js        -> envio e resumo público de reclamações
+    routes/admin.js              -> administração autenticada
     scripts/migrar.js            -> roda o schema.sql no banco
     scripts/importarHorariosUrbs.js -> baixa os dados da URBS e popula o banco
+    scripts/importarEmpresas.js  -> importa backend/data/linhas_empresas.csv
+    scripts/anonimizarReclamacoes.js -> remove nomes com mais de 12 meses
 ```
 
 ## Backend local
@@ -43,10 +47,18 @@ backend/
 1. Entre na pasta `backend/` e instale as dependências: `npm install`.
 2. Copie `backend/.env.example` para `backend/.env` e preencha os dados
    de um MySQL local ou remoto. O arquivo `.env` não deve ser publicado.
+   Configure também `HASH_SALT`, `ADMIN_SENHA`, `ADMIN_SEGREDO` e,
+   opcionalmente, `URBS_EMAIL_RECLAMACAO` no ambiente do servidor.
 3. Ainda em `backend/`, rode `npm run migrar` e
    `npm run importar-horarios`.
 4. Inicie a API com `npm start`. Por padrão, ela ficará em
    `http://localhost:3000`.
+
+Para importar relações de empresas, disponibilize o CSV com cabeçalho
+`codigo,empresa,consorcio` em `backend/data/linhas_empresas.csv` e execute
+`npm run importar-empresas`. Sem o arquivo, o comando apenas informa que não
+há dados para importar. Execute periodicamente `npm run anonimizar-reclamacoes`
+para apagar nomes de relatos com mais de 12 meses.
 
 ## Frontend
 
@@ -75,7 +87,9 @@ CSS e JS do frontend, altere `version` em `version.json` e execute
 3. Envie o conteúdo da pasta `backend/` para essa aplicação (Git Version
    Control ou File Manager). Não suba `node_modules` nem `.env`.
 4. Na tela do Node.js App, defina as variáveis de ambiente:
-   `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `CORS_ORIGIN` e
+   `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `CORS_ORIGIN`,
+   `HASH_SALT`, `ADMIN_SENHA`, `ADMIN_SEGREDO` e, se desejado,
+   `URBS_EMAIL_RECLAMACAO`; nunca publique seus valores.
    clique em **Run NPM Install**.
 5. Pelo Terminal do cPanel (ou SSH), entre no ambiente virtual que o
    cPanel criou (o comando exato aparece na própria tela do Node.js
@@ -113,3 +127,7 @@ CSS e JS do frontend, altere `version` em `version.json` e execute
   de todos os pontos/terminais da linha
 - `GET /api/status` → confirma se o banco está de pé e quando foi a
   última importação
+- `POST /api/reclamacoes` e `GET /api/reclamacoes/resumo` → registrar um
+  relato e obter totais públicos de relatos aprovados/encaminhados
+- `GET /api/config` → configurações públicas necessárias à interface
+- `/api/admin/*` → painel autenticado; página estática em `/admin.html`

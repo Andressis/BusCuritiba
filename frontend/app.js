@@ -1334,6 +1334,7 @@ async function abrirModalLinha(idLinha) {
   document.getElementById("modal-titulo-linha").textContent = linha.nome;
   document.getElementById("modal-sentido-texto").textContent =
     linha.categoria_servico || "";
+  carregarResumoReclamacoesLinha(linha.id);
 
   document.querySelectorAll(".tipo-dia-btn").forEach((btn) => {
     btn.classList.toggle("ativo", btn.dataset.tipo === "util");
@@ -1501,6 +1502,254 @@ function atualizarEstadoConexao() {
   document.getElementById("aviso-offline").classList.toggle("oculto", !offline);
 }
 
+/* ---------- RECLAMAÇÕES ---------- */
+let localizacaoReclamacao = null;
+let emailUrbsReclamacao = "";
+let textoReclamacaoEmail = "";
+let temporizadorBuscaLinhaReclamacao = null;
+let requisicaoBuscaLinhaReclamacao = 0;
+
+function definirDataReclamacaoAgora() {
+  const agora = new Date();
+  agora.setMinutes(agora.getMinutes() - agora.getTimezoneOffset());
+  document.getElementById("reclamacao-data").value = agora.toISOString().slice(0, 16);
+}
+
+function abrirModalReclamacao(idLinha = null) {
+  const formulario = document.getElementById("form-reclamacao");
+  formulario.reset();
+  localizacaoReclamacao = null;
+  textoReclamacaoEmail = "";
+  emailUrbsReclamacao = "";
+  document.getElementById("reclamacao-mensagem").textContent = "";
+  document.getElementById("reclamacao-localizacao-status").textContent = "";
+  document.getElementById("reclamacao-copia-status").textContent = "";
+  document.getElementById("reclamacao-confirmacao").classList.add("oculto");
+  document.getElementById("reclamacao-formulario").classList.remove("oculto");
+  document.getElementById("reclamacao-rodape").classList.remove("oculto");
+  document.getElementById("btn-enviar-urbs").classList.add("oculto");
+  document.getElementById("reclamacao-sugestoes").classList.add("oculto");
+  document.getElementById("reclamacao-linha-id").value = "";
+  if (idLinha !== null && idLinha !== undefined) {
+    const linha = obterLinhaPorId(String(idLinha)) ||
+      LINHAS.find((item) => String(item.id) === String(idLinha));
+    document.getElementById("reclamacao-linha-id").value = String(idLinha);
+    document.getElementById("reclamacao-linha").value = linha
+      ? `${linha.numero} - ${linha.nome}`
+      : String(idLinha);
+  }
+  definirDataReclamacaoAgora();
+  atualizarContadorDescricao();
+  document.getElementById("modal-reclamacao").classList.remove("oculto");
+}
+
+function fecharModalReclamacao() {
+  document.getElementById("modal-reclamacao").classList.add("oculto");
+}
+
+function atualizarContadorDescricao() {
+  const descricao = document.getElementById("reclamacao-descricao").value;
+  document.getElementById("reclamacao-contador").textContent = `${descricao.length}/500`;
+}
+
+function formatarDataReclamacao(valor) {
+  if (!valor) return "Não informada";
+  const data = new Date(valor);
+  return Number.isNaN(data.getTime()) ? "Não informada" : data.toLocaleString("pt-BR");
+}
+
+function criarTextoReclamacaoEmail() {
+  const campoLinha = document.getElementById("reclamacao-linha");
+  const linha = campoLinha.value.trim() || "Não informada";
+  const opcoesTipo = document.getElementById("reclamacao-tipo");
+  const tipo = opcoesTipo.options[opcoesTipo.selectedIndex].text;
+  const data = formatarDataReclamacao(document.getElementById("reclamacao-data").value);
+  const parada = document.getElementById("reclamacao-parada").value.trim();
+  const local = parada
+    ? `Parada ${parada}`
+    : localizacaoReclamacao
+      ? `Coordenadas: ${localizacaoReclamacao.lat}, ${localizacaoReclamacao.lng}\nMapa: https://maps.google.com/?q=${localizacaoReclamacao.lat},${localizacaoReclamacao.lng}`
+      : "Não informado";
+  const prefixo = document.getElementById("reclamacao-prefixo").value.trim() || "Não informado";
+  const descricao = document.getElementById("reclamacao-descricao").value.trim();
+  const completo = [
+    `Linha: ${linha}`,
+    `Tipo: ${tipo}`,
+    `Data e hora: ${data}`,
+    `Local: ${local}`,
+    `Veículo/prefixo: ${prefixo}`,
+    "",
+    "Descrição:",
+    descricao,
+  ].join("\n");
+  const caracteres = Array.from(completo);
+  return caracteres.length > 1500 ? `${caracteres.slice(0, 1497).join("")}...` : completo;
+}
+
+async function enviarReclamacao(evento) {
+  evento.preventDefault();
+  const botao = document.getElementById("btn-enviar-reclamacao");
+  const mensagem = document.getElementById("reclamacao-mensagem");
+  const dataCampo = document.getElementById("reclamacao-data").value;
+  const corpo = {
+    tipo: document.getElementById("reclamacao-tipo").value,
+    ocorrido_em: dataCampo ? new Date(dataCampo).toISOString() : undefined,
+    linha_id: document.getElementById("reclamacao-linha-id").value || undefined,
+    parada_num: document.getElementById("reclamacao-parada").value.trim() || undefined,
+    prefixo: document.getElementById("reclamacao-prefixo").value.trim() || undefined,
+    descricao: document.getElementById("reclamacao-descricao").value.trim(),
+    nome: document.getElementById("reclamacao-nome").value.trim() || undefined,
+    site: document.getElementById("reclamacao-site").value,
+  };
+  if (localizacaoReclamacao) {
+    corpo.lat = localizacaoReclamacao.lat;
+    corpo.lng = localizacaoReclamacao.lng;
+  }
+  botao.disabled = true;
+  mensagem.textContent = "";
+  try {
+    const resposta = await fetch(`${API_BASE_URL}/reclamacoes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corpo),
+    });
+    const dados = await resposta.json().catch(() => ({}));
+    if (resposta.status === 400) {
+      mensagem.textContent = dados.mensagem || "Confira os dados e tente novamente.";
+      return;
+    }
+    if (resposta.status === 429) {
+      mensagem.textContent = "Você atingiu o limite de envios. Tente novamente mais tarde.";
+      return;
+    }
+    if (!resposta.ok) {
+      mensagem.textContent = "Não foi possível enviar o relato agora. Tente novamente.";
+      return;
+    }
+    textoReclamacaoEmail = criarTextoReclamacaoEmail();
+    document.getElementById("reclamacao-formulario").classList.add("oculto");
+    document.getElementById("reclamacao-rodape").classList.add("oculto");
+    document.getElementById("reclamacao-confirmacao").classList.remove("oculto");
+    try {
+      const configuracao = await fetch(`${API_BASE_URL}/config`);
+      if (configuracao.ok) {
+        const dadosConfig = await configuracao.json();
+        emailUrbsReclamacao = typeof dadosConfig.emailUrbs === "string"
+          ? dadosConfig.emailUrbs
+          : "";
+      }
+    } catch (erroConfig) {
+      console.warn("Não foi possível obter o endereço da URBS:", erroConfig);
+    }
+    document.getElementById("btn-enviar-urbs").classList.toggle(
+      "oculto",
+      !emailUrbsReclamacao
+    );
+  } catch (erro) {
+    console.error("Falha ao enviar reclamação:", erro);
+    mensagem.textContent = "Não foi possível conectar para enviar. Verifique sua conexão e tente novamente.";
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+async function carregarResumoReclamacoesLinha(idLinha) {
+  const elemento = document.getElementById("modal-reclamacoes-resumo");
+  elemento.classList.add("oculto");
+  elemento.textContent = "";
+  try {
+    const chave = "buscwb_resumo_reclamacoes_v1";
+    let resumo;
+    try {
+      resumo = JSON.parse(sessionStorage.getItem(chave) || "null");
+    } catch (erro) {
+      console.warn("Não foi possível ler o resumo de reclamações da sessão:", erro);
+    }
+    if (!Array.isArray(resumo)) {
+      const resposta = await fetch(`${API_BASE_URL}/reclamacoes/resumo`);
+      if (!resposta.ok) return;
+      const dados = await resposta.json();
+      resumo = Array.isArray(dados.resumo) ? dados.resumo : [];
+      try {
+        sessionStorage.setItem(chave, JSON.stringify(resumo));
+      } catch (erro) {
+        console.warn("Não foi possível guardar o resumo de reclamações:", erro);
+      }
+    }
+    if (String(linhaSelecionadaId) !== String(idLinha)) return;
+    const item = resumo.find((registro) => String(registro.linha_id) === String(idLinha));
+    if (!item || !Number.isFinite(Number(item.total)) || Number(item.total) <= 0) return;
+    elemento.textContent = `${Number(item.total)} relatos nos últimos 30 dias`;
+    elemento.classList.remove("oculto");
+  } catch (erro) {
+    console.warn("Não foi possível carregar o resumo de reclamações:", erro);
+  }
+}
+
+function configurarBuscaLinhaReclamacao() {
+  const entrada = document.getElementById("reclamacao-linha");
+  const sugestoes = document.getElementById("reclamacao-sugestoes");
+  entrada.addEventListener("input", () => {
+    document.getElementById("reclamacao-linha-id").value = "";
+    clearTimeout(temporizadorBuscaLinhaReclamacao);
+    const requisicao = ++requisicaoBuscaLinhaReclamacao;
+    const termo = entrada.value.trim();
+    sugestoes.replaceChildren();
+    if (termo.length < 2) {
+      sugestoes.classList.add("oculto");
+      return;
+    }
+    temporizadorBuscaLinhaReclamacao = setTimeout(async () => {
+      try {
+        const linhas = await buscarLinhasNaApi(termo);
+        if (requisicao !== requisicaoBuscaLinhaReclamacao) return;
+        sugestoes.replaceChildren();
+        linhas.slice(0, 8).forEach((linha) => {
+          const botao = document.createElement("button");
+          botao.type = "button";
+          botao.className = "reclamacao-sugestao";
+          botao.textContent = `${linha.numero} - ${linha.nome}`;
+          botao.addEventListener("click", () => {
+            entrada.value = `${linha.numero} - ${linha.nome}`;
+            document.getElementById("reclamacao-linha-id").value = String(linha.id);
+            sugestoes.classList.add("oculto");
+          });
+          sugestoes.appendChild(botao);
+        });
+        if (!linhas.length) {
+          const vazio = document.createElement("p");
+          vazio.className = "reclamacao-dica";
+          vazio.textContent = "Nenhuma linha encontrada.";
+          sugestoes.appendChild(vazio);
+        }
+        sugestoes.classList.remove("oculto");
+      } catch (erro) {
+        if (requisicao !== requisicaoBuscaLinhaReclamacao) return;
+        console.warn("Não foi possível buscar linhas para a reclamação:", erro);
+        sugestoes.replaceChildren();
+        const aviso = document.createElement("p");
+        aviso.className = "reclamacao-dica";
+        aviso.textContent = "Não foi possível buscar linhas agora.";
+        sugestoes.appendChild(aviso);
+        sugestoes.classList.remove("oculto");
+      }
+    }, 250);
+  });
+}
+
+async function usarLocalizacaoNaReclamacao() {
+  const status = document.getElementById("reclamacao-localizacao-status");
+  status.textContent = "Obtendo sua localização...";
+  try {
+    ativarLocalizacao();
+    const posicao = await obterPosicao();
+    localizacaoReclamacao = { lat: posicao.lat, lng: posicao.lng };
+    status.textContent = "Localização adicionada ao relato.";
+  } catch (erro) {
+    status.textContent = erro.message;
+  }
+}
+
 /* ---------- EVENTOS ---------- */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1519,6 +1768,55 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error("Não foi possível salvar a preferência de tema:", erro);
     }
     aplicarTema(proximoTema);
+  });
+  document.getElementById("btn-reclamar").addEventListener("click", () => abrirModalReclamacao());
+  document.getElementById("btn-reclamar-linha").addEventListener("click", () => {
+    abrirModalReclamacao(linhaSelecionadaId);
+  });
+  document.getElementById("btn-fechar-reclamacao").addEventListener("click", fecharModalReclamacao);
+  document.getElementById("modal-reclamacao").addEventListener("click", (evento) => {
+    if (evento.target.id === "modal-reclamacao") fecharModalReclamacao();
+  });
+  document.getElementById("form-reclamacao").addEventListener("submit", enviarReclamacao);
+  document.getElementById("reclamacao-descricao").addEventListener("input", atualizarContadorDescricao);
+  document.getElementById("btn-localizacao-reclamacao").addEventListener("click", usarLocalizacaoNaReclamacao);
+  configurarBuscaLinhaReclamacao();
+  document.getElementById("btn-enviar-urbs").addEventListener("click", () => {
+    if (!emailUrbsReclamacao) return;
+    const idLinha = document.getElementById("reclamacao-linha-id").value;
+    const linhaSelecionada = idLinha && (
+      obterLinhaPorId(idLinha) ||
+      LINHAS.find((item) => String(item.id) === String(idLinha))
+    );
+    const linha = linhaSelecionada
+      ? linhaSelecionada.numero
+      : document.getElementById("reclamacao-linha").value.trim() || "sem linha";
+    const campoTipo = document.getElementById("reclamacao-tipo");
+    const tipo = campoTipo.options[campoTipo.selectedIndex].text;
+    const assunto = `Reclamação - Linha ${linha} - ${tipo}`;
+    const email = encodeURIComponent(emailUrbsReclamacao).replace(/%40/gi, "@");
+    window.location.href = `mailto:${email}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(textoReclamacaoEmail)}`;
+  });
+  document.getElementById("btn-copiar-reclamacao").addEventListener("click", async () => {
+    const status = document.getElementById("reclamacao-copia-status");
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(textoReclamacaoEmail);
+      } else {
+        const campo = document.createElement("textarea");
+        campo.value = textoReclamacaoEmail;
+        campo.style.position = "fixed";
+        campo.style.opacity = "0";
+        document.body.appendChild(campo);
+        campo.select();
+        const copiado = document.execCommand("copy");
+        campo.remove();
+        if (!copiado) throw new Error("Não foi possível copiar.");
+      }
+      status.textContent = "Texto copiado.";
+    } catch (erro) {
+      status.textContent = "Não foi possível copiar o texto neste aparelho.";
+    }
   });
 
   document.getElementById("aba-linhas").addEventListener("click", () => selecionarAbaBusca("linhas"));
@@ -1564,22 +1862,31 @@ document.addEventListener("DOMContentLoaded", () => {
       const linha =
         obterLinhaPorId(linhaSelecionadaId) ||
         LINHAS.find((item) => String(item.id) === String(linhaSelecionadaId));
-      fecharModalLinha();
-      irParaTela("tela-mapa");
-
       const status = document.getElementById("mapa-status");
       if (!linha) {
         status.textContent = "Linha não encontrada para exibir o itinerário.";
         return;
       }
 
-      if (!mapa) return;
+      fecharModalLinha();
+      irParaTela("tela-mapa");
+      status.textContent = "Preparando o mapa para exibir o itinerário...";
+      try {
+        await iniciarMapa();
+        if (!mapa) {
+          status.textContent = "Não foi possível carregar o mapa para exibir o itinerário.";
+          return;
+        }
 
-      clearTimeout(debounceBuscaMapa);
-      requisicaoBuscaMapa += 1;
-      document.getElementById("mapa-busca").value = `${linha.numero} - ${linha.nome}`;
-      document.getElementById("mapa-sugestoes").classList.add("oculto");
-      await selecionarLinhaMapa(linha.id, linha);
+        clearTimeout(debounceBuscaMapa);
+        requisicaoBuscaMapa += 1;
+        document.getElementById("mapa-busca").value = `${linha.numero} - ${linha.nome}`;
+        document.getElementById("mapa-sugestoes").classList.add("oculto");
+        await selecionarLinhaMapa(linha.id, linha);
+      } catch (erro) {
+        console.error("Não foi possível abrir o itinerário no mapa:", erro);
+        status.textContent = `Não foi possível abrir o itinerário no mapa. ${erro.message}`;
+      }
     });
 
   document.querySelectorAll(".tipo-dia-btn").forEach((botao) => {

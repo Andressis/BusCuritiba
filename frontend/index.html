@@ -47,7 +47,7 @@
 
   <header class="app-header">
     <div class="header-content">
-      <div class="logo-area">
+      <a class="logo-area logo-link" href="admin.html" aria-label="Abrir administração do Bus Cwb">
         <span class="logo-marks">
 
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -63,18 +63,23 @@
 
           <h1>Bus Cwb</h1>
           <p>Transporte coletivo de Curitiba</p>
-
         </div>
+      </a>
       </div>
       <button id="btn-instalar-app" class="btn-instalar-app oculto" type="button" aria-label="Instalar Bus Cwb">
         Instalar
       </button>
-      <button id="btn-tema" class="btn-tema" type="button" aria-label="Ativar tema escuro">
-        <svg id="icone-tema" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
-        </svg>
-      </button>
+      <div class="header-acoes">
+        <button id="btn-reclamar" class="btn-reclamar" type="button" aria-label="Fazer reclamação">
+          <span aria-hidden="true">!</span>
+        </button>
+        <button id="btn-tema" class="btn-tema" type="button" aria-label="Ativar tema escuro">
+          <svg id="icone-tema" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+          </svg>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -201,6 +206,8 @@
           <p id="modal-sentido-texto">Terminal Santa Cândida → Pinheirinho</p>
         </div>
       </div>
+      <p id="modal-reclamacoes-resumo" class="modal-reclamacoes-resumo oculto"></p>
+      <button id="btn-reclamar-linha" class="btn-favoritar" type="button">Fazer reclamação desta linha</button>
 
       <button id="btn-favoritar-modal" class="btn-favoritar">
         <svg id="icone-favorito-modal" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -240,6 +247,73 @@
       </div>
 
     </div>
+  </div>
+
+  <div id="modal-reclamacao" class="modal-overlay oculto">
+    <section class="modal-reclamacao" role="dialog" aria-modal="true" aria-labelledby="reclamacao-titulo">
+      <header class="reclamacao-cabecalho">
+        <h2 id="reclamacao-titulo">Fazer reclamação</h2>
+        <button id="btn-fechar-reclamacao" class="btn-fechar" type="button" aria-label="Fechar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+        </button>
+      </header>
+      <form id="form-reclamacao" class="reclamacao-corpo">
+        <div id="reclamacao-formulario">
+          <label for="reclamacao-linha">Linha (opcional)</label>
+          <div class="reclamacao-busca-linha">
+            <input id="reclamacao-linha" type="search" autocomplete="off" placeholder="Digite número ou nome da linha" />
+            <div id="reclamacao-sugestoes" class="reclamacao-sugestoes oculto" role="listbox"></div>
+          </div>
+          <input id="reclamacao-linha-id" type="hidden" />
+
+          <label for="reclamacao-tipo">Tipo</label>
+          <select id="reclamacao-tipo" required>
+            <option value="atraso">Atraso</option>
+            <option value="lotado">Ônibus lotado</option>
+            <option value="motorista">Conduta de motorista</option>
+            <option value="veiculo_sujo_defeito">Veículo sujo ou com defeito</option>
+            <option value="acessibilidade">Acessibilidade</option>
+            <option value="infraestrutura">Infraestrutura</option>
+            <option value="outro">Outro</option>
+          </select>
+
+          <label for="reclamacao-data">Data e hora</label>
+          <input id="reclamacao-data" type="datetime-local" />
+
+          <label for="reclamacao-prefixo">Veículo / prefixo (opcional)</label>
+          <input id="reclamacao-prefixo" maxlength="20" autocomplete="off" placeholder="Ex.: BA001" />
+          <p class="reclamacao-dica">Letras e números que ficam no ônibus, ex.: BA001</p>
+
+          <label for="reclamacao-parada">Número da parada (opcional)</label>
+          <input id="reclamacao-parada" maxlength="30" inputmode="numeric" />
+          <button id="btn-localizacao-reclamacao" class="botao-secundario" type="button">Usar minha localização</button>
+          <p id="reclamacao-localizacao-status" class="reclamacao-dica" role="status"></p>
+
+          <label for="reclamacao-descricao">O que aconteceu?</label>
+          <textarea id="reclamacao-descricao" minlength="10" maxlength="500" required rows="5"></textarea>
+          <p id="reclamacao-contador" class="reclamacao-dica" aria-live="polite">0/500</p>
+          <p class="reclamacao-aviso">Não cite nomes de motoristas ou de outras pessoas.</p>
+
+          <label for="reclamacao-nome">Nome ou apelido (opcional)</label>
+          <input id="reclamacao-nome" maxlength="60" autocomplete="nickname" />
+          <p class="reclamacao-dica">Seu nome, se informado, fica visível apenas para a administração do app e é apagado após 12 meses.</p>
+          <div class="campo-isca" aria-hidden="true">
+            <label for="reclamacao-site">Site</label>
+            <input id="reclamacao-site" name="site" tabindex="-1" autocomplete="off" />
+          </div>
+          <p id="reclamacao-mensagem" class="reclamacao-mensagem" role="alert"></p>
+        </div>
+        <div id="reclamacao-confirmacao" class="reclamacao-confirmacao oculto" role="status">
+          <p>Recebemos seu relato. Ele foi salvo no app, mas NÃO foi enviado à URBS.</p>
+          <button id="btn-enviar-urbs" class="botao-primario" type="button">Enviar também à URBS</button>
+          <button id="btn-copiar-reclamacao" class="botao-secundario" type="button">Copiar texto</button>
+          <p id="reclamacao-copia-status" class="reclamacao-dica" role="status"></p>
+        </div>
+        <footer class="reclamacao-rodape" id="reclamacao-rodape">
+          <button id="btn-enviar-reclamacao" class="botao-primario" type="submit">Enviar relato</button>
+        </footer>
+      </form>
+    </section>
   </div>
 
   <nav class="bottom-nav">

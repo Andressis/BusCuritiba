@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
+  <meta name="theme-color" content="#12372A" />
+  <title>Administração - Bus Cwb</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="admin.css" />
+  <script src="admin.js" defer></script>
+</head>
+<body>
+  <main class="container-administracao">
+    <header class="cabecalho-administracao">
+      <a class="marca-administracao" href="index.html" aria-label="Voltar ao Bus Cwb">
+        <span class="icone-marca" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="4" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.6" />
+            <line x1="4" y1="10.5" x2="20" y2="10.5" stroke="currentColor" stroke-width="1.6" />
+            <line x1="8" y1="4" x2="8" y2="10.5" stroke="currentColor" stroke-width="1.6" />
+            <line x1="16" y1="4" x2="16" y2="10.5" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="8" cy="18" r="1.6" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="16" cy="18" r="1.6" stroke="currentColor" stroke-width="1.6" />
+          </svg>
+        </span>
+        <span class="texto-marca">
+          <strong>Bus Cwb</strong>
+          <span>Transporte coletivo de Curitiba</span>
+        </span>
+      </a>
+      <div class="acoes-cabecalho">
+        <span class="selo-administracao">Área administrativa</span>
+        <a class="botao-secundario link-voltar" href="index.html">Voltar ao site</a>
+        <button id="btn-sair" class="botao-secundario oculto" type="button">Sair</button>
+      </div>
+    </header>
+    <p id="mensagem-administracao" class="mensagem" role="status" aria-live="polite"></p>
+    <section id="tela-login" class="area-login">
+      <div class="cartao-login">
+        <span class="icone-acesso" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="4" y="10" width="16" height="11" rx="2" stroke="currentColor" stroke-width="1.7" />
+            <path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+          </svg>
+        </span>
+        <p class="sobretitulo">ACESSO RESTRITO</p>
+        <h1>Administração Bus Cwb</h1>
+        <p class="descricao-login">Entre para gerenciar relatos e informações operacionais.</p>
+        <form id="form-login">
+          <label for="senha-administracao">Senha administrativa</label>
+          <input id="senha-administracao" type="password" autocomplete="current-password" placeholder="Digite sua senha" required />
+          <button class="botao-primario" type="submit">Entrar <span aria-hidden="true">→</span></button>
+        </form>
+        <p class="nota-seguranca">Acesso protegido · sessão temporária</p>
+      </div>
+    </section>
+    <section id="painel-administracao" class="oculto">
+      <nav class="abas" aria-label="Seções administrativas">
+        <button class="aba ativa" type="button" data-aba="reclamacoes">Reclamações</button>
+        <button class="aba" type="button" data-aba="painel">Painel</button>
+        <button class="aba" type="button" data-aba="empresas">Empresas</button>
+      </nav>
+      <section id="secao-reclamacoes" class="secao-administracao">
+        <h2>Reclamações</h2>
+        <form id="filtros-reclamacoes" class="filtros">
+          <label>Status
+            <select id="filtro-status">
+              <option value="">Todos</option>
+              <option value="pendente">Pendente</option>
+              <option value="aprovada">Aprovada</option>
+              <option value="rejeitada">Rejeitada</option>
+              <option value="encaminhada">Encaminhada</option>
+            </select>
+          </label>
+          <label>Linha <input id="filtro-linha" maxlength="20" /></label>
+          <label>Empresa <input id="filtro-empresa" maxlength="150" /></label>
+          <button class="botao-secundario" type="submit">Filtrar</button>
+        </form>
+        <div id="lista-reclamacoes" class="lista-administrativa"></div>
+        <div class="paginacao">
+          <button id="pagina-anterior" class="botao-secundario" type="button">Anterior</button>
+          <span id="pagina-atual"></span>
+          <button id="pagina-proxima" class="botao-secundario" type="button">Próxima</button>
+        </div>
+      </section>
+      <section id="secao-painel" class="secao-administracao oculto">
+        <h2>Painel</h2>
+        <p id="total-30-dias" class="resumo-total"></p>
+        <div class="grade-paineis">
+          <article class="cartao"><h3>Linhas · últimos 30 dias (total / aprovadas)</h3><div id="painel-linhas"></div></article>
+          <article class="cartao"><h3>Por empresa · últimos 30 dias</h3><div id="painel-empresas"></div></article>
+          <article class="cartao"><h3>Por tipo · últimos 30 dias</h3><div id="painel-tipos"></div></article>
+        </div>
+      </section>
+      <section id="secao-empresas" class="secao-administracao oculto">
+        <h2>Empresas por linha</h2>
+        <p>Edite somente as linhas listadas; enviar substitui os vínculos dessas linhas.</p>
+        <div id="lista-empresas-linha" class="lista-administrativa"></div>
+        <form id="form-empresa-linha" class="form-linha">
+          <label>Código da linha <input id="nova-empresa-linha" maxlength="20" required /></label>
+          <label>Empresa <input id="nova-empresa-nome" maxlength="150" required /></label>
+          <label>Consórcio (opcional) <input id="nova-empresa-consorcio" maxlength="150" /></label>
+          <button class="botao-secundario" type="submit">Adicionar</button>
+        </form>
+        <button id="btn-salvar-empresas" class="botao-primario" type="button">Salvar empresas</button>
+        <h2 class="titulo-prefixos">Prefixos</h2>
+        <div id="lista-prefixos" class="lista-administrativa"></div>
+        <form id="form-prefixo" class="form-linha">
+          <label>Letra <input id="novo-prefixo-letra" maxlength="1" required /></label>
+          <label>Empresa <input id="novo-prefixo-empresa" maxlength="150" required /></label>
+          <button class="botao-secundario" type="submit">Adicionar</button>
+        </form>
+        <button id="btn-salvar-prefixos" class="botao-primario" type="button">Salvar prefixos</button>
+      </section>
+    </section>
+  </main>
+</body>
+</html>
