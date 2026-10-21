@@ -1658,7 +1658,7 @@ async function carregarResumoReclamacoesLinha(idLinha) {
   elemento.classList.add("oculto");
   elemento.textContent = "";
   try {
-    const chave = "buscwb_resumo_reclamacoes_v1";
+    const chave = "buscwb_resumo_reclamacoes_v2";
     let resumo;
     try {
       resumo = JSON.parse(sessionStorage.getItem(chave) || "null");
@@ -1679,7 +1679,20 @@ async function carregarResumoReclamacoesLinha(idLinha) {
     if (String(linhaSelecionadaId) !== String(idLinha)) return;
     const item = resumo.find((registro) => String(registro.linha_id) === String(idLinha));
     if (!item || !Number.isFinite(Number(item.total)) || Number(item.total) <= 0) return;
-    elemento.textContent = `${Number(item.total)} relatos nos últimos 30 dias`;
+    const rotulosPorTipo = {
+      atraso: (total) => `${total} ${total === 1 ? "atraso" : "atrasos"}`,
+      lotado: (total) => `${total} ${total === 1 ? "ônibus lotado" : "ônibus lotados"}`,
+      motorista: (total) => `${total} ${total === 1 ? "relato de conduta de motorista" : "relatos de conduta de motorista"}`,
+      veiculo_sujo_defeito: (total) => `${total} ${total === 1 ? "relato de veículo sujo ou com defeito" : "relatos de veículo sujo ou com defeito"}`,
+      acessibilidade: (total) => `${total} de acessibilidade`,
+      infraestrutura: (total) => `${total} de infraestrutura`,
+      outro: (total) => `${total} ${total === 1 ? "outro relato" : "outros relatos"}`,
+    };
+    const detalhes = Object.entries(item.por_tipo || {})
+      .filter(([tipo, total]) => rotulosPorTipo[tipo] && Number.isFinite(Number(total)) && Number(total) > 0)
+      .map(([tipo, total]) => rotulosPorTipo[tipo](Number(total)));
+    const total = Number(item.total);
+    elemento.textContent = `${total} ${total === 1 ? "relato" : "relatos"} nos últimos 30 dias${detalhes.length ? ` · ${detalhes.join(", ")}` : ""}`;
     elemento.classList.remove("oculto");
   } catch (erro) {
     console.warn("Não foi possível carregar o resumo de reclamações:", erro);

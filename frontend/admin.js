@@ -143,21 +143,89 @@ function preencherTabela(id, cabecalhos, linhas) {
   const container = document.getElementById(id);
   container.replaceChildren();
   const tabela = criarElemento("table", null, "tabela-resumo");
+  const cabecalho = document.createElement("thead");
+  const linhaCabecalho = document.createElement("tr");
+  cabecalhos.forEach((campo) => linhaCabecalho.appendChild(criarElemento("th", campo)));
+  cabecalho.appendChild(linhaCabecalho);
+  tabela.appendChild(cabecalho);
+  const corpo = document.createElement("tbody");
   linhas.forEach((linha) => {
     const tr = document.createElement("tr");
     cabecalhos.forEach((campo) => tr.appendChild(criarElemento("td", linha[campo])));
-    tabela.appendChild(tr);
+    corpo.appendChild(tr);
   });
+  tabela.appendChild(corpo);
   if (!linhas.length) container.appendChild(criarElemento("p", "Sem dados no período.", "metadados"));
   else container.appendChild(tabela);
+}
+
+function rotuloTipoPlural(tipo) {
+  const rotulos = {
+    atraso: "atrasos",
+    lotado: "ônibus lotados",
+    motorista: "condutas de motorista",
+    veiculo_sujo_defeito: "veículos sujos ou com defeito",
+    acessibilidade: "acessibilidade",
+    infraestrutura: "infraestrutura",
+    outro: "outros",
+  };
+  return rotulos[tipo] || rotuloTipo(tipo).toLocaleLowerCase("pt-BR");
+}
+
+function criarCelulaTotalLinha(item, indice) {
+  const celula = document.createElement("td");
+  const detalhes = Object.entries(item.por_tipo || {})
+    .filter(([, total]) => Number(total) > 0)
+    .map(([tipo, total]) => `${total} ${rotuloTipoPlural(tipo)}`);
+  const resumo = detalhes.length
+    ? detalhes.join(", ")
+    : "Detalhamento por tipo indisponível";
+  const indicador = criarElemento("span", item.total, "total-com-detalhes");
+  const identificador = `detalhes-linha-${indice}`;
+  indicador.tabIndex = 0;
+  indicador.setAttribute("role", "img");
+  indicador.setAttribute("aria-label", `Total de ${item.total} relatos. ${resumo}.`);
+  indicador.setAttribute("aria-describedby", identificador);
+  const dica = criarElemento("span", resumo, "dica-detalhes-linha");
+  dica.id = identificador;
+  dica.setAttribute("role", "tooltip");
+  indicador.appendChild(dica);
+  celula.appendChild(indicador);
+  return celula;
+}
+
+function preencherTabelaLinhas(linhas) {
+  const container = document.getElementById("painel-linhas");
+  container.replaceChildren();
+  if (!linhas.length) {
+    container.appendChild(criarElemento("p", "Sem dados no período.", "metadados"));
+    return;
+  }
+  const tabela = document.createElement("table");
+  tabela.className = "tabela-resumo";
+  const cabecalho = document.createElement("thead");
+  const linhaCabecalho = document.createElement("tr");
+  ["Linha", "Relatos", "Aprovadas"].forEach((titulo) => {
+    linhaCabecalho.appendChild(criarElemento("th", titulo));
+  });
+  cabecalho.appendChild(linhaCabecalho);
+  tabela.appendChild(cabecalho);
+  const corpo = document.createElement("tbody");
+  linhas.forEach((item, indice) => {
+    const linha = document.createElement("tr");
+    linha.appendChild(criarElemento("td", item.linha_id));
+    linha.appendChild(criarCelulaTotalLinha(item, indice));
+    linha.appendChild(criarElemento("td", item.aprovadas));
+    corpo.appendChild(linha);
+  });
+  tabela.appendChild(corpo);
+  container.appendChild(tabela);
 }
 
 async function carregarPainel() {
   const dados = await requisitarAdministracao("/painel");
   document.getElementById("total-30-dias").textContent = `Total de relatos nos últimos 30 dias: ${dados.ultimos_30_dias}`;
-  preencherTabela("painel-linhas", ["linha", "total", "aprovadas"], dados.linhas.map((item) => ({
-    linha: item.linha_id, total: item.total, aprovadas: item.aprovadas,
-  })));
+  preencherTabelaLinhas(dados.linhas);
   preencherTabela("painel-empresas", ["empresa", "total"], dados.empresas.map((item) => ({
     empresa: item.empresa, total: item.total,
   })));

@@ -65,9 +65,15 @@
 
 .modal-reclamacoes-resumo {
   flex: 0 0 auto;
-  margin: -8px 0 12px;
-  color: var(--texto-secundario);
-  font-size: 11px;
+  margin: 0 0 10px;
+  padding: 9px 11px;
+  color: var(--texto);
+  background: var(--verde-suave);
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--verde);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .modal-linha > #btn-reclamar-linha {

@@ -162,7 +162,7 @@ router.delete("/reclamacoes/:id", async (req, res) => {
 
 router.get("/painel", async (req, res) => {
   try {
-    const [[linhas], [empresas], [tipos], [recentes]] = await Promise.all([
+    const [[linhas], [tiposPorLinha], [empresas], [tipos], [recentes]] = await Promise.all([
       pool.query(
         `SELECT linha_id, COUNT(*) AS total,
                 SUM(status = 'aprovada') AS aprovadas
@@ -170,6 +170,14 @@ router.get("/painel", async (req, res) => {
          WHERE linha_id IS NOT NULL
            AND criada_em >= NOW() - INTERVAL 30 DAY
          GROUP BY linha_id ORDER BY total DESC, linha_id ASC`
+      ),
+      pool.query(
+        `SELECT linha_id, tipo, COUNT(*) AS total
+         FROM reclamacoes
+         WHERE linha_id IS NOT NULL
+           AND criada_em >= NOW() - INTERVAL 30 DAY
+         GROUP BY linha_id, tipo
+         ORDER BY linha_id ASC, total DESC, tipo ASC`
       ),
       pool.query(
         `SELECT COALESCE(empresa, 'Indefinida') AS empresa, COUNT(*) AS total
@@ -188,11 +196,18 @@ router.get("/painel", async (req, res) => {
          WHERE criada_em >= NOW() - INTERVAL 30 DAY`
       ),
     ]);
+    const tiposPorLinhaIndexados = new Map();
+    tiposPorLinha.forEach((item) => {
+      const linhaId = String(item.linha_id);
+      if (!tiposPorLinhaIndexados.has(linhaId)) tiposPorLinhaIndexados.set(linhaId, {});
+      tiposPorLinhaIndexados.get(linhaId)[item.tipo] = Number(item.total);
+    });
     res.json({
       linhas: linhas.map((item) => ({
         linha_id: item.linha_id,
         total: Number(item.total),
         aprovadas: Number(item.aprovadas),
+        por_tipo: tiposPorLinhaIndexados.get(String(item.linha_id)) || {},
       })),
       empresas: empresas.map((item) => ({ empresa: item.empresa, total: Number(item.total) })),
       tipos: tipos.map((item) => ({ tipo: item.tipo, total: Number(item.total) })),
