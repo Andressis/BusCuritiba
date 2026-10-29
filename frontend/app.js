@@ -1700,6 +1700,7 @@ function abrirModalReclamacao(idLinha = null) {
   definirDataReclamacaoAgora();
   atualizarContadorDescricao();
   document.getElementById("modal-reclamacao").classList.remove("oculto");
+  document.getElementById("reclamacao-formulario").scrollTop = 0;
 }
 
 function fecharModalReclamacao() {
