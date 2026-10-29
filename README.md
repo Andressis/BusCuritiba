@@ -67,6 +67,19 @@ estáticos. Antes de publicar, configure `API_BASE_URL` em `frontend/app.js`
 com a URL pública da API, incluindo `/api`. A API precisa permitir a
 origem do frontend na variável `CORS_ORIGIN`.
 
+Na tela principal, a busca, o mapa do trajeto e o painel de horários ficam
+integrados. O mapa usa `GET /api/mapa/linhas/:id/shape` (`trechos[].pontos`,
+coordenadas `[lat, lng]`) e `GET /api/mapa/linhas/:id/pontos` (`num`, `nome`,
+`lat`, `lng`, `seq`, `itinerario` e `sentido`). O painel usa
+`GET /api/linhas/:id/horarios?tipoDia=util|sabado|domingo`.
+
+O endpoint de horários não relaciona cada parada da rota a um quadro horário.
+O frontend associa o quadro ao terminal quando o nome coincide; sem
+correspondência, usa a ordem disponível (primeiro quadro para ida e segundo
+para volta). Para paradas intermediárias, os horários são estimativas de
+chegada calculadas pela distância entre as coordenadas da rota, não horários
+oficiais por parada.
+
 Para testar localmente, sirva a pasta `frontend/` com um servidor HTTP
 estático. Não abra `index.html` diretamente como arquivo, pois as
 chamadas à API e o service worker precisam de uma origem HTTP(S).
@@ -113,7 +126,7 @@ CSS e JS do frontend, altere `version` em `version.json` e execute
 - Cada linha tem vários **pontos/terminais**, cada um com sua própria
   lista de horários. O `ponto_principal` salvo em `linhas` é o ponto
   com mais horários cadastrados, usado para calcular o "próximo
-  horário" mostrado na lista inicial do app.
+  horário" exibido nos resultados de linhas.
 - O "próximo horário" é calculado dinamicamente (fuso horário de
   Curitiba, não o do servidor): dia da semana atual + primeiro
   horário do melhor ponto que ainda não passou, com fallback para o

@@ -1151,6 +1151,7 @@ svg {
   cursor: pointer;
   color: var(--texto-secundario);
   font-family: inherit;
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
 .tipo-dia-btn.ativo {
@@ -1858,6 +1859,11 @@ body {
 }
 
 @media (max-width: 760px) {
+  .app-header {
+    padding-top: calc(8px + env(safe-area-inset-top));
+    padding-bottom: 8px;
+  }
+
   .item-linha {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
@@ -2043,5 +2049,525 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Mapa e consulta de horários em uma única tela */
+body {
+  padding-bottom: 0;
+  background: var(--fundo);
+}
+
+.app-header {
+  padding: 10px clamp(12px, 2vw, 24px);
+}
+
+.header-content {
+  width: 100%;
+  max-width: 1440px;
+  display: grid;
+  grid-template-columns: auto minmax(240px, 680px) auto;
+  gap: clamp(10px, 2vw, 28px);
+}
+
+.logo-area {
+  gap: 9px;
+}
+
+.logo-marks {
+  width: 36px;
+  height: 36px;
+  flex-basis: 36px;
+}
+
+.titles h1 {
+  font-size: 19px;
+}
+
+.titles p {
+  font-size: 10px;
+}
+
+.header-busca {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  border-color: rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  background: var(--superficie);
+}
+
+#mapa-busca {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--texto);
+  font: 14px "Space Grotesk", sans-serif;
+}
+
+#mapa-busca::placeholder {
+  color: var(--placeholder);
+}
+
+#btn-buscar {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: 9px 0 0 9px;
+}
+
+.header-acoes {
+  gap: 6px;
+}
+
+.btn-header-acao {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 9px;
+  background: transparent;
+  color: #FFFFFF;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-header-acao:hover,
+.btn-header-acao:focus-visible {
+  border-color: var(--lima);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn-header-acao:focus-visible,
+.btn-voltar:focus-visible,
+.tipo-dia-btn:focus-visible,
+.grade-completa summary:focus-visible {
+  outline: 3px solid var(--lima);
+  outline-offset: 2px;
+}
+
+.btn-header-acao svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
+
+.btn-favoritos {
+  width: auto;
+  padding: 0 10px;
+  gap: 6px;
+  font: 600 12px "Space Grotesk", sans-serif;
+}
+
+.btn-reclamar span {
+  font-size: 22px;
+}
+
+.sugestoes {
+  top: calc(100% + 6px);
+  max-height: min(60vh, 380px);
+  border-radius: 10px;
+}
+
+.sugestao-linha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  border-bottom: 1px solid var(--borda);
+  background: var(--superficie);
+}
+
+.sugestao-linha:last-child {
+  border-bottom: 0;
+}
+
+.sugestao-linha .sugestao {
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 0;
+}
+
+.sugestao-linha .btn-estrela-card {
+  width: 44px;
+  height: 44px;
+}
+
+.app-main {
+  width: 100%;
+  max-width: 1440px;
+  min-height: 0;
+  padding: 10px clamp(12px, 2vw, 24px) 28px;
+}
+
+#tela-mapa.ativa {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.8fr);
+  grid-template-areas:
+    "map panel"
+    "legend panel"
+    "status panel";
+  align-items: start;
+  gap: 8px 16px;
+}
+
+.mapa-wrapper {
+  grid-area: map;
+  min-width: 0;
+}
+
+.mapa {
+  height: min(68vh, 760px);
+  min-height: 360px;
+  margin: 0;
+  border-radius: 12px;
+}
+
+.btn-localizacao-mapa {
+  z-index: 500;
+}
+
+.mapa-legenda {
+  grid-area: legend;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 0;
+  padding: 7px 10px;
+  font-size: 11px;
+}
+
+.mapa-status {
+  grid-area: status;
+  min-height: 18px;
+  margin: 0;
+  color: var(--texto-secundario);
+  font-size: 11px;
+}
+
+.painel-horarios {
+  grid-area: panel;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: var(--superficie);
+  box-shadow: 0 3px 12px var(--sombra-suave);
+}
+
+.horarios-vazio h2,
+.painel-horarios-titulo h2,
+.cabecalho-favoritos h2 {
+  color: var(--texto);
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.horarios-vazio p,
+.painel-horarios-titulo > p {
+  margin: 4px 0 0;
+  color: var(--texto-secundario);
+  font-size: 12px;
+}
+
+.painel-horarios-cabecalho {
+  margin-bottom: 12px;
+}
+
+.painel-horarios-titulo .rotulo {
+  margin-bottom: 3px;
+}
+
+.controles-horarios {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.seletor-horarios .rotulo {
+  margin-bottom: 4px;
+}
+
+.tipo-dia-botoes {
+  min-height: 36px;
+}
+
+.tipo-dia-btn {
+  min-width: 0;
+  padding: 6px 4px;
+  color: var(--texto-secundario);
+  font: 500 11px "Space Grotesk", sans-serif;
+}
+
+.tipo-dia-btn.ativo {
+  background: var(--verde-escuro);
+  color: var(--lima);
+  font-weight: 700;
+}
+
+.proximos-horarios {
+  margin-top: 14px;
+}
+
+.horarios-secao-titulo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.horarios-secao-titulo h3 {
+  font-size: 13px;
+}
+
+.horarios-nota {
+  color: var(--texto-secundario);
+  font-size: 10px;
+  text-align: right;
+}
+
+.grade-proximos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  min-height: 38px;
+  color: var(--texto-secundario);
+  font-size: 12px;
+}
+
+.horario-chip {
+  min-height: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 5px 4px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  background: var(--fundo);
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.horario-chip.proximo {
+  border-color: var(--lima);
+  background: var(--verde-escuro);
+  color: var(--lima);
+  font-weight: 700;
+}
+
+.horario-chip .selo-proximo {
+  color: inherit;
+  font-size: 9px;
+  line-height: 1.1;
+}
+
+.grade-completa {
+  margin-top: 12px;
+  border-top: 1px solid var(--borda);
+}
+
+.grade-completa summary {
+  padding: 10px 0 4px;
+  color: var(--texto-secundario);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.grade-horarios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 35vh;
+  overflow: auto;
+  padding: 8px 1px 2px;
+}
+
+.grade-horarios .horario-chip {
+  min-width: 56px;
+  min-height: 32px;
+}
+
+.grade-horarios .horario-chip.passado {
+  opacity: 0.42;
+}
+
+.grade-horarios .horario-chip.proximo {
+  opacity: 1;
+}
+
+.tela-favoritos.ativa {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.cabecalho-favoritos {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.btn-voltar {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  background: var(--superficie);
+  color: var(--texto);
+  cursor: pointer;
+  font: 600 12px "Space Grotesk", sans-serif;
+}
+
+.tela-favoritos .abas-busca {
+  max-width: none;
+  margin: 0 0 14px;
+}
+
+.tela-favoritos .secao {
+  margin-bottom: 12px;
+}
+
+.tela-favoritos .item-linha {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 760px) {
+  .header-content {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 10px;
+  }
+
+  .logo-area {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .header-acoes {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .btn-favoritos {
+    width: 40px;
+    padding: 0;
+  }
+
+  .btn-favoritos span {
+    display: none;
+  }
+
+  .header-busca {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+  }
+
+  .btn-instalar-app {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  #tela-mapa.ativa {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "map" "legend" "status" "panel";
+    gap: 6px;
+  }
+
+  .mapa {
+    height: clamp(230px, 38vh, 360px);
+    min-height: 0;
+  }
+
+  .painel-horarios {
+    padding: 11px;
+  }
+
+  .horarios-vazio h2,
+  .painel-horarios-titulo h2 {
+    font-size: 15px;
+  }
+
+  .grade-proximos {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .grade-proximos .horario-chip {
+    min-height: 34px;
+  }
+}
+
+@media (max-width: 760px) and (max-height: 740px) {
+  .app-main {
+    padding-top: 6px;
+    padding-bottom: 16px;
+  }
+
+  #tela-mapa.ativa {
+    gap: 4px;
+  }
+
+  .mapa {
+    height: clamp(185px, 28vh, 215px);
+  }
+
+  .painel-horarios {
+    padding: 7px;
+  }
+
+  .proximos-horarios {
+    margin-top: 7px;
+  }
+}
+
+@media (max-width: 380px) {
+  .header-content {
+    gap: 7px;
+  }
+
+  .logo-marks {
+    display: none;
+  }
+
+  .titles h1 {
+    font-size: 17px;
+  }
+
+  .titles p {
+    max-width: 130px;
+    font-size: 9px;
+  }
+
+  .header-acoes {
+    gap: 4px;
+  }
+
+  .btn-header-acao {
+    width: 36px;
+    height: 38px;
+  }
+
+  .controles-horarios {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
   }
 }

@@ -1,4 +1,4 @@
-<!-- Version = v1.0.5 -->
+<!-- Version = v1.0.9 -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 
@@ -38,9 +38,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="vendor/leaflet.css" />
-  <script src="vendor/leaflet.js" defer></script>
-  <link rel="stylesheet" href="style.css?v=1.0.5" />
+  <link rel="stylesheet" href="vendor/leaflet.css?v=1.0.9" />
+  <script src="vendor/leaflet.js?v=1.0.9" defer></script>
+  <link rel="stylesheet" href="style.css?v=1.0.9" />
 </head>
 
 <body>
@@ -65,21 +65,42 @@
           <p>Transporte coletivo de Curitiba</p>
         </div>
       </a>
+      <div class="busca-container header-busca" id="busca-linhas-container">
+        <button id="btn-buscar" type="button" aria-label="Pesquisar linha" title="Pesquisar linha">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8" />
+            <line x1="20" y1="20" x2="15.5" y2="15.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </button>
+        <input id="mapa-busca" type="search" placeholder="Número ou nome da linha" autocomplete="off"
+          aria-label="Buscar linha" aria-controls="mapa-sugestoes" aria-autocomplete="list"
+          aria-expanded="false" />
+        <div id="mapa-sugestoes" class="sugestoes oculto" role="listbox" aria-label="Resultados de linhas"></div>
       </div>
-      <button id="btn-instalar-app" class="btn-instalar-app oculto" type="button" aria-label="Instalar Bus Cwb">
-        Instalar
-      </button>
       <div class="header-acoes">
-        <button id="btn-reclamar" class="btn-reclamar" type="button" aria-label="Fazer reclamação">
+        <button id="btn-favoritos" class="btn-header-acao btn-favoritos" type="button"
+          aria-label="Abrir favoritos" title="Favoritos">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <polygon points="12,3 14.9,9.3 21.8,10 16.7,14.6 18.2,21.5 12,17.9 5.8,21.5 7.3,14.6 2.2,10 9.1,9.3"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+          </svg>
+          <span>Favoritos</span>
+        </button>
+        <button id="btn-reclamar" class="btn-header-acao btn-reclamar" type="button"
+          aria-label="Reportar problema" title="Reportar problema">
           <span aria-hidden="true">!</span>
         </button>
-        <button id="btn-tema" class="btn-tema" type="button" aria-label="Ativar tema escuro">
+        <button id="btn-tema" class="btn-header-acao btn-tema" type="button" aria-label="Alternar modo escuro"
+          title="Alternar modo escuro">
           <svg id="icone-tema" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="4" />
             <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
           </svg>
         </button>
       </div>
+      <button id="btn-instalar-app" class="btn-instalar-app oculto" type="button" aria-label="Instalar Bus Cwb">
+        Instalar
+      </button>
     </div>
   </header>
 
@@ -89,74 +110,11 @@
   <p id="dica-ios" class="dica-ios oculto">Toque em Compartilhar e depois em Adicionar à Tela de Início.</p>
 
   <main class="app-main">
-
-    <section id="tela-inicio" class="tela ativa">
-
-      <div class="busca-container" id="busca-linhas-container">
-        <input type="text" id="input-busca" placeholder="Digite o número ou nome da linha" autocomplete="off" />
-        <button id="btn-buscar" aria-label="Pesquisar linha">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8" />
-            <line x1="20" y1="20" x2="15.5" y2="15.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-          </svg>
-        </button>
-      </div>
-
-      <div class="abas-busca" role="tablist" aria-label="Tipo de busca">
-        <button id="aba-linhas" type="button" class="aba-busca ativa" role="tab" aria-selected="true">Linhas</button>
-        <button id="aba-paradas" type="button" class="aba-busca" role="tab" aria-selected="false">Paradas</button>
-      </div>
-      <div id="busca-paradas" class="busca-paradas oculto">
-        <input id="input-busca-paradas" type="search" placeholder="Digite o nome ou número da parada" autocomplete="off" />
-        <div id="resultados-busca-paradas" class="lista-paradas" aria-live="polite"></div>
-
-        <section class="secao">
-          <div class="secao-titulo"><h2>Paradas perto de mim</h2></div>
-          <button id="btn-localizacao" class="botao-secundario" type="button">Ativar localização</button>
-          <p id="localizacao-status" class="status-localizacao" role="status" aria-live="polite"></p>
-          <div id="lista-paradas-proximas" class="lista-paradas" aria-live="polite"></div>
-        </section>
-
-        <section class="secao">
-          <div class="secao-titulo"><h2>Paradas favoritas</h2></div>
-          <div id="lista-paradas-favoritas-inicio" class="lista-paradas"></div>
-          <p id="msg-paradas-favoritas-inicio" class="mensagem-vazia">Toque na estrela de uma parada para adicioná-la aos favoritos.</p>
-        </section>
-      </div>
-
-      <section class="secao" id="secao-linhas-favoritas">
-        <div class="secao-titulo">
-          <h2>Linhas favoritas</h2>
-        </div>
-        <div id="lista-favoritas" class="lista-linhas-container lista-favoritas">
-          <p class="mensagem-vazia" id="msg-sem-favoritas">
-            Você ainda não tem linhas favoritas. Toque na estrela de uma linha para adicionar.
-          </p>
-        </div>
-      </section>
-
-      <section class="secao" id="secao-resultados-linhas">
-        <div class="secao-titulo">
-          <h2>Linhas e próximos horários</h2>
-        </div>
-        <div id="lista-linhas" class="lista-linhas-container">
-        </div>
-        <p class="mensagem-vazia oculto" id="msg-sem-resultado">
-          Nenhuma linha encontrada para essa busca.
-        </p>
-      </section>
-
-    </section>
-
-    <section id="tela-mapa" class="tela">
-      <div class="mapa-busca">
-        <input id="mapa-busca" class="select-ponto" type="text" placeholder="Digite o número ou nome da linha"
-          autocomplete="off" />
-        <div id="mapa-sugestoes" class="sugestoes oculto"></div>
-      </div>
+    <section id="tela-mapa" class="tela ativa">
       <div class="mapa-wrapper">
         <div id="mapa" class="mapa"></div>
-        <button id="btn-localizacao-mapa" class="btn-localizacao-mapa" type="button" aria-label="Mostrar minha localização">📍</button>
+        <button id="btn-localizacao-mapa" class="btn-localizacao-mapa" type="button"
+          aria-label="Mostrar minha localização" title="Mostrar minha localização">📍</button>
       </div>
       <div id="mapa-legenda" class="mapa-legenda oculto">
         <button id="btn-leg-ida" class="item-legenda" type="button" aria-pressed="true">
@@ -166,22 +124,82 @@
           <span class="leg-cor cor-volta"></span> Volta <small id="leg-volta"></small>
         </button>
       </div>
-      <p class="mensagem-vazia" id="mapa-status" role="status" aria-live="polite">
-        Digite o número ou o nome de uma linha para ver o trajeto.
-      </p>
+      <p class="mapa-status" id="mapa-status" role="status" aria-live="polite"></p>
+
+      <section class="painel-horarios" aria-labelledby="horarios-titulo">
+        <div id="horarios-vazio" class="horarios-vazio">
+          <h2>Próximos horários</h2>
+          <p>Busque uma linha para ver o trajeto e os horários.</p>
+        </div>
+        <div id="horarios-conteudo" class="oculto">
+          <div class="painel-horarios-cabecalho">
+            <div class="painel-horarios-titulo">
+              <span class="rotulo">Linha <span id="horarios-numero-linha"></span></span>
+              <h2 id="horarios-titulo">Próximos horários</h2>
+              <p id="nome-ponto-selecionado"></p>
+            </div>
+          </div>
+          <div class="controles-horarios">
+            <div class="seletor-horarios">
+              <span class="rotulo">Tipo de dia</span>
+              <div class="tipo-dia-botoes" role="group" aria-label="Tipo de dia">
+                <button class="tipo-dia-btn" type="button" data-tipo="util" aria-pressed="false">Dia útil</button>
+                <button class="tipo-dia-btn" type="button" data-tipo="sabado" aria-pressed="false">Sábado</button>
+                <button class="tipo-dia-btn" type="button" data-tipo="domingo" aria-pressed="false">Domingo</button>
+              </div>
+            </div>
+            <div class="seletor-horarios">
+              <span class="rotulo">Sentido</span>
+              <div class="tipo-dia-botoes" role="group" aria-label="Sentido da linha">
+                <button id="btn-sentido-ida" class="tipo-dia-btn sentido-btn ativo" type="button" data-sentido="ida"
+                  aria-pressed="true">Ida</button>
+                <button id="btn-sentido-volta" class="tipo-dia-btn sentido-btn" type="button" data-sentido="volta"
+                  aria-pressed="false">Volta</button>
+              </div>
+            </div>
+          </div>
+          <div class="proximos-horarios">
+            <div class="horarios-secao-titulo">
+              <h3>Próximos</h3>
+              <span id="horarios-estimativa" class="horarios-nota"></span>
+            </div>
+            <div id="lista-proximos-horarios" class="grade-proximos" aria-live="polite"></div>
+          </div>
+          <details class="grade-completa">
+            <summary>Ver grade completa do dia</summary>
+            <div id="lista-horarios-modal" class="grade-horarios" aria-live="polite"></div>
+          </details>
+        </div>
+      </section>
     </section>
 
-    <section id="tela-favoritos" class="tela">
-      <div class="secao-titulo">
-        <h2>Minhas linhas favoritas</h2>
+    <section id="tela-favoritos" class="tela tela-favoritos">
+      <div class="cabecalho-favoritos">
+        <h2>Meus favoritos</h2>
+        <button id="btn-fechar-favoritos" class="btn-voltar" type="button" aria-label="Voltar ao mapa">Voltar ao mapa</button>
       </div>
+      <div class="abas-busca" role="tablist" aria-label="Tipo de favorito">
+        <button id="aba-linhas" type="button" class="aba-busca ativa" role="tab" aria-selected="true">Linhas</button>
+        <button id="aba-paradas" type="button" class="aba-busca" role="tab" aria-selected="false">Paradas</button>
+      </div>
+      <section id="secao-favoritos-linhas">
       <div id="lista-favoritos-tela" class="lista-linhas-container">
       </div>
       <p class="mensagem-vazia" id="msg-favoritos-vazio">
-        Você ainda não favoritou nenhuma linha. Vá até "Início" e toque
-        na estrela de uma linha para adicioná-la aqui.
+        Você ainda não favoritou nenhuma linha. Use a estrela em um resultado da busca para adicioná-la aqui.
       </p>
-      <section class="secao">
+      </section>
+      <div id="busca-paradas" class="busca-paradas oculto">
+        <input id="input-busca-paradas" type="search" placeholder="Digite o nome ou número da parada" autocomplete="off" />
+        <div id="resultados-busca-paradas" class="lista-paradas" aria-live="polite"></div>
+        <section class="secao">
+          <div class="secao-titulo"><h2>Paradas perto de mim</h2></div>
+          <button id="btn-localizacao" class="botao-secundario" type="button">Ativar localização</button>
+          <p id="localizacao-status" class="status-localizacao" role="status" aria-live="polite"></p>
+          <div id="lista-paradas-proximas" class="lista-paradas" aria-live="polite"></div>
+        </section>
+      </div>
+      <section class="secao" id="secao-favoritos-paradas">
         <div class="secao-titulo"><h2>Minhas paradas favoritas</h2></div>
         <div id="lista-paradas-favoritas-tela" class="lista-paradas"></div>
         <p id="msg-paradas-favoritas-tela" class="mensagem-vazia">Você ainda não favoritou paradas. Use a estrela em uma parada para adicioná-la aqui.</p>
@@ -189,65 +207,6 @@
     </section>
 
   </main>
-
-  <div id="modal-overlay" class="modal-overlay oculto">
-    <div class="modal-linha">
-      <button id="btn-fechar-modal" class="btn-fechar" aria-label="Fechar">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-          <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-        </svg>
-      </button>
-
-      <div class="modal-header">
-        <div class="modal-header-numero" id="modal-numero-linha">250</div>
-        <div class="modal-header-texto">
-          <h2 id="modal-titulo-linha">Ligeirão Norte/Sul</h2>
-          <p id="modal-sentido-texto">Terminal Santa Cândida → Pinheirinho</p>
-        </div>
-      </div>
-      <button id="btn-reclamar-linha" class="btn-favoritar" type="button">Fazer reclamação desta linha</button>
-
-      <button id="btn-favoritar-modal" class="btn-favoritar">
-        <svg id="icone-favorito-modal" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <polygon points="12,3 14.9,9.3 21.8,10 16.7,14.6 18.2,21.5 12,17.9 5.8,21.5 7.3,14.6 2.2,10 9.1,9.3"
-            stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
-        </svg>
-        <span id="texto-favoritar-modal">Favoritar linha</span>
-      </button>
-
-      <button id="btn-ver-itinerario" class="btn-favoritar" type="button"
-        aria-label="Ver itinerário da linha nos sentidos de ida e volta">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <path d="M9 18l-6 3V6l6-3m0 15l6 3m-6-3V3m6 18l6-3V3l-6 3m0 15V6m0 0L9 3"
-            stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <span>Ver itinerário (ida e volta)</span>
-      </button>
-
-      <div class="modal-tipo-dia">
-        <span class="rotulo">Tipo de dia</span>
-        <div class="tipo-dia-botoes">
-          <button class="tipo-dia-btn ativo" data-tipo="util">Dia útil</button>
-          <button class="tipo-dia-btn" data-tipo="sabado">Sábado</button>
-          <button class="tipo-dia-btn" data-tipo="domingo">Domingo</button>
-        </div>
-      </div>
-
-      <div class="modal-ponto" id="seletor-ponto-wrapper">
-        <span class="rotulo">Ponto / Terminal</span>
-        <select id="seletor-ponto" class="select-ponto"></select>
-      </div>
-
-      <div class="modal-horarios">
-        <span class="rotulo">Próximos horários</span>
-        <p id="modal-reclamacoes-resumo" class="modal-reclamacoes-resumo oculto" aria-live="polite"></p>
-        <div id="lista-horarios-modal" class="horarios-lista">
-        </div>
-      </div>
-
-    </div>
-  </div>
 
   <div id="modal-reclamacao" class="modal-overlay oculto">
     <section class="modal-reclamacao" role="dialog" aria-modal="true" aria-labelledby="reclamacao-titulo">
@@ -316,35 +275,7 @@
     </section>
   </div>
 
-  <nav class="bottom-nav">
-    <button class="nav-item ativo" data-tela="tela-inicio">
-      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M4 11.5L12 4l8 7.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-          stroke-linejoin="round" />
-        <path d="M6 10v9h12v-9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-          stroke-linejoin="round" />
-      </svg>
-      <span class="nav-label">Início</span>
-    </button>
-    <button class="nav-item" data-tela="tela-mapa">
-      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M9 4L4 6v14l5-2 6 2 5-2V4l-5 2-6-2z" stroke="currentColor" stroke-width="1.5"
-          stroke-linejoin="round" />
-        <line x1="9" y1="4" x2="9" y2="18" stroke="currentColor" stroke-width="1.5" />
-        <line x1="15" y1="6" x2="15" y2="20" stroke="currentColor" stroke-width="1.5" />
-      </svg>
-      <span class="nav-label">Mapa</span>
-    </button>
-    <button class="nav-item" data-tela="tela-favoritos">
-      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <polygon points="12,3 14.9,9.3 21.8,10 16.7,14.6 18.2,21.5 12,17.9 5.8,21.5 7.3,14.6 2.2,10 9.1,9.3"
-          stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
-      </svg>
-      <span class="nav-label">Favoritos</span>
-    </button>
-  </nav>
-
-  <script src="app.js?v=1.0.5"></script>
+  <script src="app.js?v=1.0.9"></script>
 </body>
 
 </html>
